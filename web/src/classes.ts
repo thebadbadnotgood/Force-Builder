@@ -252,22 +252,29 @@ export function getClassById(id: string): ForceClass | undefined {
   return GAME_CLASSES.find((c) => c.id === id)
 }
 
-/** Filenames in `public/class-icons/` (served from site root with BASE_URL). */
-const CLASS_ICON_FILES: Partial<Record<string, string>> = {
-  grunt: 'GRUNT.png',
-  trooper: 'RANGED 2 TROOPER.png',
-  warrior: 'MELEE 2 WARRIOR.png',
-  veteran: 'RANGED 3 VETERAN.png',
-  vanguard: 'MELEE 3 VANGUARD.png',
-  commando: 'RANGED 4 COMMANDO.png',
-  champion: 'MELEE 4 CHAMPION.png',
-  eliminator: 'RANGED 5 ELIMINATOR.png',
-  destroyer: 'MELEE 5 DESTROYER.png',
+/** PNGs in `src/assets/class-icons/` — Vite emits hashed `/assets/…` URLs so icons work with any `base` (e.g. GitHub Pages). */
+const CLASS_ICON_URLS: Partial<Record<string, string>> = {
+  grunt: new URL('./assets/class-icons/GRUNT.png', import.meta.url).href,
+  trooper: new URL('./assets/class-icons/RANGED 2 TROOPER.png', import.meta.url)
+    .href,
+  warrior: new URL('./assets/class-icons/MELEE 2 WARRIOR.png', import.meta.url)
+    .href,
+  veteran: new URL('./assets/class-icons/RANGED 3 VETERAN.png', import.meta.url)
+    .href,
+  vanguard: new URL('./assets/class-icons/MELEE 3 VANGUARD.png', import.meta.url)
+    .href,
+  commando: new URL('./assets/class-icons/RANGED 4 COMMANDO.png', import.meta.url)
+    .href,
+  champion: new URL('./assets/class-icons/MELEE 4 CHAMPION.png', import.meta.url)
+    .href,
+  eliminator: new URL(
+    './assets/class-icons/RANGED 5 ELIMINATOR.png',
+    import.meta.url,
+  ).href,
+  destroyer: new URL('./assets/class-icons/MELEE 5 DESTROYER.png', import.meta.url)
+    .href,
 }
 
 export function getClassIconUrl(classId: string): string | undefined {
-  const file = CLASS_ICON_FILES[classId]
-  if (!file) return undefined
-  const base = import.meta.env.BASE_URL
-  return `${base}class-icons/${encodeURIComponent(file)}`
+  return CLASS_ICON_URLS[classId]
 }
