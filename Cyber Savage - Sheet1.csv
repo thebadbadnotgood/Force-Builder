@@ -1,0 +1,18 @@
+Class,Level,Speed,Health,Melee,Ranged,Defense,Willpower,Characteristics,Equipment
+Grunt,1,6,10,d4,d4,d4, d4,1,std rng or std mel
+Trooper,2,6,14,d4,d6,d6,d6,2,std rng
+Warrior,2,7,14,d6,d4,d6,d6,2,std mel
+Mercenary,2,7,14,d6,d6,d6,d6,2,sim rng and sim mel
+Mage,2,6,12,d4,d4,d4,d6,2,"sim mel, 2 spells"
+Veteran,3,6,16,d6,d8,d8,d6,2,adv rng
+Vanguard,3,7,16,d8,d6,d8,d6,2,adv mel
+Raider,3,7,16,d8,d8,d8,d6,2,"std rng, std mel"
+Magus,3,6,14,d6,d6,d6,d8,2,"std mel, 3 spells"
+Commando,4,6,18,d8,d10,d10,d8,3,adv rng
+Champion,4,7,18,d10,d8,d10,d8,3,adv mel
+Reaver,4,7,18,d10,d10,d10,d8,3,"std rng, std mel"
+Archmage,4,6,16,d6,d6,d8,d10,3,"adv mel, 4 spells"
+Eliminator,5,7,20,d10,d12,d12,d12,3,prime rng
+Destroyer,5,8,20,d10,d12,d12,d10,3,prime mel
+Marauder,5,8,20,d12,d12,d12,d10,3,"adv mel, adv rng"
+Hypermage,5,7,18,d8,d8,d10,d12,3,"adv mel, 4 spells, Spell Mastery*"

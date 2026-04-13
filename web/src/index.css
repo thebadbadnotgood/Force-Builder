@@ -1,0 +1,36 @@
+:root {
+  --cs-bg: #030806;
+  --cs-panel: rgba(8, 22, 14, 0.92);
+  --cs-input-bg: rgba(4, 14, 9, 0.85);
+  --cs-border: rgba(0, 255, 136, 0.14);
+  --cs-green: #00ff88;
+  --cs-green-dim: #00c46a;
+  --cs-text: #e8f7ef;
+  --cs-muted: rgba(232, 247, 239, 0.55);
+  --cs-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--cs-text);
+  background-color: var(--cs-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+}
+
+#root {
+  min-height: 100svh;
+}
