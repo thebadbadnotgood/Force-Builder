@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   CLASS_TIER_MAX,
   CLASS_TIER_MIN,
@@ -25,7 +25,7 @@ import {
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
-const STORAGE_VERSION = 6
+const STORAGE_VERSION = 7
 /** Default force budget (each character costs points equal to their class tier / level). */
 const DEFAULT_FORCE_POINT_BUDGET = 12
 const FORCE_POINT_BUDGET_MIN = 1
@@ -126,6 +126,11 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
+function normalizeForceName(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  return raw.trim()
+}
+
 function normalizeCharacter(x: unknown): Character | null {
   if (!x || typeof x !== 'object') return null
   const o = x as Record<string, unknown>
@@ -165,6 +170,7 @@ function loadPersisted(): PersistedPayload {
   const empty = (): PersistedPayload => ({
     characters: [],
     forcePointBudget: DEFAULT_FORCE_POINT_BUDGET,
+    forceName: '',
   })
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -179,6 +185,13 @@ function loadPersisted(): PersistedPayload {
       )
     }
 
+    let forceName = ''
+    if (parsed && typeof parsed === 'object' && 'forceName' in parsed) {
+      forceName = normalizeForceName(
+        (parsed as { forceName: unknown }).forceName,
+      )
+    }
+
     if (
       parsed &&
       typeof parsed === 'object' &&
@@ -189,6 +202,7 @@ function loadPersisted(): PersistedPayload {
       const ver = (parsed as { version: unknown }).version
       if (
         ver === STORAGE_VERSION ||
+        ver === 6 ||
         ver === 5 ||
         ver === 4 ||
         ver === 3 ||
@@ -197,7 +211,7 @@ function loadPersisted(): PersistedPayload {
         const characters = (parsed as { characters: unknown[] }).characters
           .map(normalizeCharacter)
           .filter((c): c is Character => c !== null)
-        return { characters, forcePointBudget }
+        return { characters, forcePointBudget, forceName }
       }
     }
 
@@ -233,6 +247,7 @@ function loadPersisted(): PersistedPayload {
             },
           ],
           forcePointBudget,
+          forceName: '',
         }
       }
     }
@@ -268,6 +283,16 @@ function parseForcePointBudget(raw: unknown): number {
 type PersistedPayload = {
   characters: Character[]
   forcePointBudget: number
+  /** Name for this force (team / roster); editable from the roster top bar. */
+  forceName: string
+}
+
+type AppView = 'landing' | 'forceName' | 'forceBudget' | 'roster' | 'wizard'
+
+function initialAppView(p: PersistedPayload): AppView {
+  if (p.characters.length > 0) return 'roster'
+  if (normalizeForceName(p.forceName)) return 'roster'
+  return 'landing'
 }
 
 function savePersisted(payload: PersistedPayload) {
@@ -277,6 +302,7 @@ function savePersisted(payload: PersistedPayload) {
       version: STORAGE_VERSION,
       characters: payload.characters,
       forcePointBudget: payload.forcePointBudget,
+      forceName: normalizeForceName(payload.forceName),
     }),
   )
 }
@@ -323,12 +349,20 @@ function wizardProgressIndex(s: Step, hasWeapons: boolean): number {
 }
 
 function App() {
-  const [view, setView] = useState<'roster' | 'wizard'>('roster')
   const [initialPersisted] = useState(loadPersisted)
+  const [view, setView] = useState<AppView>(() =>
+    initialAppView(initialPersisted),
+  )
   const [characters, setCharacters] = useState(initialPersisted.characters)
   const [forcePointBudget, setForcePointBudget] = useState(
     initialPersisted.forcePointBudget,
   )
+  const [forceName, setForceName] = useState(initialPersisted.forceName)
+  const [editingForceName, setEditingForceName] = useState(false)
+  const [forceNameDraft, setForceNameDraft] = useState('')
+  const [setupForceNameInput, setSetupForceNameInput] = useState('')
+  const topbarForceNameInputRef = useRef<HTMLInputElement>(null)
+  const setupForceNameInputRef = useRef<HTMLInputElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<WizardDraft>(emptyDraft)
   const [step, setStep] = useState<Step>('name')
@@ -337,8 +371,24 @@ function App() {
   const [spellFilter, setSpellFilter] = useState('')
 
   useEffect(() => {
-    savePersisted({ characters, forcePointBudget })
-  }, [characters, forcePointBudget])
+    savePersisted({ characters, forcePointBudget, forceName })
+  }, [characters, forcePointBudget, forceName])
+
+  useEffect(() => {
+    if (view !== 'roster') setEditingForceName(false)
+  }, [view])
+
+  useEffect(() => {
+    if (view === 'roster' && editingForceName) {
+      const el = topbarForceNameInputRef.current
+      el?.focus()
+      el?.select()
+    }
+  }, [view, editingForceName])
+
+  useEffect(() => {
+    if (view === 'forceName') setupForceNameInputRef.current?.focus()
+  }, [view])
 
   const rosterPointsUsed = useMemo(
     () => totalForcePointsUsed(characters),
@@ -545,6 +595,54 @@ function App() {
     }
   }, [step, selectedClass, classHasWeaponsAccess, classHasSpellsAccess])
 
+  const beginCreateNewForce = useCallback(() => {
+    setCharacters([])
+    setForcePointBudget(DEFAULT_FORCE_POINT_BUDGET)
+    setForceName('')
+    setSetupForceNameInput('')
+    setEditingId(null)
+    setDraft(emptyDraft())
+    setStep('name')
+    setTraitFilter('')
+    setWeaponTraitFilter('')
+    setSpellFilter('')
+    setView('forceName')
+  }, [])
+
+  const backFromForceNameToLanding = useCallback(() => {
+    setView('landing')
+  }, [])
+
+  const completeForceNaming = useCallback(() => {
+    const n = normalizeForceName(setupForceNameInput)
+    if (!n) return
+    setForceName(n)
+    setEditingId(null)
+    setStep('name')
+    setTraitFilter('')
+    setWeaponTraitFilter('')
+    setSpellFilter('')
+    setView('forceBudget')
+  }, [setupForceNameInput])
+
+  const backFromForceBudgetToForceNaming = useCallback(() => {
+    setSetupForceNameInput(forceName)
+    setView('forceName')
+  }, [forceName])
+
+  const completeForceBudgetSetup = useCallback(() => {
+    setEditingId(null)
+    setStep('name')
+    setTraitFilter('')
+    setWeaponTraitFilter('')
+    setSpellFilter('')
+    setView('wizard')
+  }, [])
+
+  const backFromCharacterNameToForceNaming = useCallback(() => {
+    setView('forceBudget')
+  }, [])
+
   const startNewCharacter = useCallback(() => {
     setEditingId(null)
     setDraft(emptyDraft())
@@ -750,15 +848,183 @@ function App() {
               All characters
             </button>
           </>
-        ) : (
-          <div className="topbar__count" aria-live="polite">
-            {characters.length}{' '}
-            {characters.length === 1 ? 'character' : 'characters'}
+        ) : view === 'roster' ? (
+          <div className="topbar__roster-meta" aria-live="polite">
+            {editingForceName ? (
+              <div
+                className="topbar__force-edit"
+                role="group"
+                aria-label="Edit team name"
+              >
+                <input
+                  ref={topbarForceNameInputRef}
+                  id="topbar-force-name"
+                  className="topbar__force-input"
+                  type="text"
+                  autoComplete="off"
+                  maxLength={120}
+                  placeholder="Team name…"
+                  value={forceNameDraft}
+                  onChange={(e) => setForceNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      setForceName(normalizeForceName(forceNameDraft))
+                      setEditingForceName(false)
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setEditingForceName(false)
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => {
+                    setForceName(normalizeForceName(forceNameDraft))
+                    setEditingForceName(false)
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => setEditingForceName(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`topbar__force-trigger${forceName.trim() ? '' : ' topbar__force-trigger--empty'}`}
+                onClick={() => {
+                  setForceNameDraft(forceName)
+                  setEditingForceName(true)
+                }}
+                title="Edit team name"
+              >
+                {forceName.trim() || 'Name your force'}
+              </button>
+            )}
+            <span className="topbar__roster-sep" aria-hidden="true">
+              ·
+            </span>
+            <span className="topbar__character-count">
+              {characters.length}{' '}
+              {characters.length === 1 ? 'character' : 'characters'}
+            </span>
           </div>
-        )}
+        ) : null}
       </header>
 
-      <main className="main">
+      <main
+        className={
+          view === 'landing' ||
+          view === 'forceName' ||
+          view === 'forceBudget' ||
+          (view === 'wizard' && step === 'name')
+            ? 'main main--intro'
+            : 'main'
+        }
+      >
+        {view === 'landing' && (
+          <div className="intro intro--button-only">
+            <button
+              type="button"
+              className="btn btn--primary intro__cta"
+              onClick={beginCreateNewForce}
+              aria-label="Create a new force"
+            >
+              Create New Force
+            </button>
+          </div>
+        )}
+
+        {view === 'forceName' && (
+          <section className="panel setup-force" aria-labelledby="setup-force-title">
+            <p className="panel__kicker">New force</p>
+            <h2 id="setup-force-title" className="panel__title">
+              Name your force
+            </h2>
+            <label className="field">
+              <input
+                ref={setupForceNameInputRef}
+                className="field__input"
+                type="text"
+                autoComplete="off"
+                maxLength={120}
+                placeholder="e.g. The Fallen, Lords of Chaos"
+                value={setupForceNameInput}
+                onChange={(e) => setSetupForceNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    completeForceNaming()
+                  }
+                }}
+              />
+            </label>
+          </section>
+        )}
+
+        {view === 'forceBudget' && (
+          <section
+            className="panel setup-force-budget setup-force-budget--minimal"
+            aria-labelledby="setup-budget-masthead"
+          >
+            <p className="panel__kicker">New force</p>
+            <h2 id="setup-budget-masthead" className="panel__title">
+              Set your point budget
+            </h2>
+            <p className="panel__lead">
+              Each character costs points equal to their class level. Set your force's total budget, then build within it.
+            </p>
+            <div className="setup-force-budget__stepper-only">
+              <div
+                className="stepper setup-force-budget__stepper"
+                role="group"
+                aria-label={`Force point budget (${FORCE_POINT_BUDGET_MIN}–${FORCE_POINT_BUDGET_MAX})`}
+              >
+                <button
+                  type="button"
+                  className="stepper__btn"
+                  onClick={() =>
+                    setForcePointBudget((n) =>
+                      stepInt(n, FORCE_POINT_BUDGET_MIN, FORCE_POINT_BUDGET_MAX, -1),
+                    )
+                  }
+                  disabled={forcePointBudget <= FORCE_POINT_BUDGET_MIN}
+                  aria-label="Decrease budget"
+                >
+                  –
+                </button>
+                <output
+                  id="setup-force-point-budget"
+                  className="stepper__value force-budget__slider-num"
+                  aria-live="polite"
+                >
+                  {forcePointBudget}
+                </output>
+                <button
+                  type="button"
+                  className="stepper__btn"
+                  onClick={() =>
+                    setForcePointBudget((n) =>
+                      stepInt(n, FORCE_POINT_BUDGET_MIN, FORCE_POINT_BUDGET_MAX, 1),
+                    )
+                  }
+                  disabled={forcePointBudget >= FORCE_POINT_BUDGET_MAX}
+                  aria-label="Increase budget"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {view === 'roster' && (
           <div className="roster">
             <section
@@ -904,7 +1170,7 @@ function App() {
         )}
 
         {view === 'wizard' && step === 'name' && (
-          <section className="panel" aria-labelledby="step-name">
+          <section className="panel setup-force" aria-labelledby="step-name">
             <p className="panel__kicker">
               {editingId ? 'Edit — ' : ''}Step {wizardStepNum} of{' '}
               {wizardStepTotal}
@@ -939,11 +1205,6 @@ function App() {
             <h2 id="step-class" className="panel__title">
               Choose a class
             </h2>
-            <p className="panel__lead">
-              Each level has its own menu. Pick one archetype — choosing a class
-              sets tier from that row on the sheet. A level costs that many force
-              points (e.g. level 3 = 3 points toward your force budget).
-            </p>
             <p
               className={`force-points-hint${!withinForceBudget ? ' force-points-hint--over' : ''}`}
               aria-live="polite"
@@ -1057,10 +1318,6 @@ function App() {
             <h2 id="step-traits" className="panel__title">
               Choose characteristics
             </h2>
-            <p className="panel__lead">
-              Pick exactly {MAX_PLAYER_CHARACTERISTICS} from the list. Search to
-              narrow options.
-            </p>
             <p className="trait-counter" aria-live="polite">
               Selected {draft.characteristicIds.length} /{' '}
               {MAX_PLAYER_CHARACTERISTICS}
@@ -1113,12 +1370,6 @@ function App() {
             <h2 id="step-weapon-traits" className="panel__title">
               Choose weapon traits
             </h2>
-            <p className="panel__lead">
-              Pick any traits for this character’s weapons. Options are filtered
-              from your class equipment: traits that require a melee weapon
-              need <code className="panel__code">mel</code> in equipment; ranged-only
-              traits need <code className="panel__code">rng</code>.
-            </p>
             <p className="trait-counter" aria-live="polite">
               Selected {draft.weaponTraitIds.length}
               {draft.weaponTraitIds.length === 1 ? ' trait' : ' traits'}
@@ -1234,6 +1485,10 @@ function App() {
                   <div>
                     <dt>Name</dt>
                     <dd>{draft.name.trim() || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Force</dt>
+                    <dd>{forceName.trim() || '—'}</dd>
                   </div>
                   <div>
                     <dt>Class</dt>
@@ -1376,7 +1631,49 @@ function App() {
         )}
       </main>
 
-      <footer className="actions">
+      {view !== 'landing' && (
+        <footer className="actions">
+        {view === 'forceName' && (
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={backFromForceNameToLanding}
+            >
+              Back
+            </button>
+            <div className="actions__spacer" />
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={completeForceNaming}
+              disabled={!normalizeForceName(setupForceNameInput)}
+            >
+              Continue
+            </button>
+          </>
+        )}
+
+        {view === 'forceBudget' && (
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={backFromForceBudgetToForceNaming}
+            >
+              Back
+            </button>
+            <div className="actions__spacer" />
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={completeForceBudgetSetup}
+            >
+              Continue
+            </button>
+          </>
+        )}
+
         {view === 'roster' && (
           <>
             {characters.length > 0 && (
@@ -1402,11 +1699,21 @@ function App() {
 
         {view === 'wizard' && step !== 'sheet' && (
           <>
-            {step !== 'name' && (
+            {step === 'name' &&
+            editingId === null &&
+            characters.length === 0 ? (
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={backFromCharacterNameToForceNaming}
+              >
+                Back
+              </button>
+            ) : step !== 'name' ? (
               <button type="button" className="btn btn--ghost" onClick={goBack}>
                 Back
               </button>
-            )}
+            ) : null}
             <div className="actions__spacer" />
             <button
               type="button"
@@ -1453,7 +1760,8 @@ function App() {
             </button>
           </>
         )}
-      </footer>
+        </footer>
+      )}
     </div>
   )
 }
