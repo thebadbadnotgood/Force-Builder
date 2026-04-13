@@ -727,7 +727,7 @@ function App() {
         <div className="topbar__brand">
           <img
             className="topbar__logo"
-            src="/cs-logo.png"
+            src={`${import.meta.env.BASE_URL}cs-logo.png`}
             alt="Cyber Savage"
           />
           <div>
