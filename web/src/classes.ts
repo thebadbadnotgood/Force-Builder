@@ -252,7 +252,7 @@ export function getClassById(id: string): ForceClass | undefined {
   return GAME_CLASSES.find((c) => c.id === id)
 }
 
-/** Filenames in `/public/class-icons/` (mirrors repo `class-icons/`). */
+/** Filenames in `public/class-icons/` (served from site root with BASE_URL). */
 const CLASS_ICON_FILES: Partial<Record<string, string>> = {
   grunt: 'GRUNT.png',
   trooper: 'RANGED 2 TROOPER.png',
@@ -268,5 +268,6 @@ const CLASS_ICON_FILES: Partial<Record<string, string>> = {
 export function getClassIconUrl(classId: string): string | undefined {
   const file = CLASS_ICON_FILES[classId]
   if (!file) return undefined
-  return `/class-icons/${encodeURIComponent(file)}`
+  const base = import.meta.env.BASE_URL
+  return `${base}class-icons/${encodeURIComponent(file)}`
 }
