@@ -1187,7 +1187,7 @@ function App() {
                 className="field__input"
                 type="text"
                 autoComplete="off"
-                placeholder="e.g. Crabaton, Abaddon"
+                placeholder="e.g. Crabaton, Quorthon"
                 value={draft.name}
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, name: e.target.value }))
