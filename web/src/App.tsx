@@ -3,6 +3,7 @@ import {
   CLASS_TIER_MAX,
   CLASS_TIER_MIN,
   GAME_CLASSES,
+  type ForceClass,
   getClassById,
   getClassIconUrl,
 } from './classes'
@@ -348,6 +349,161 @@ function wizardProgressIndex(s: Step, hasWeapons: boolean): number {
   }
 }
 
+function ClassIconBadge({
+  classId,
+  name,
+  size,
+}: {
+  classId: string
+  name: string
+  size: 'card' | 'trigger'
+}) {
+  const src = getClassIconUrl(classId)
+  const px = size === 'card' ? 48 : 36
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={px}
+        height={px}
+        className={
+          size === 'card'
+            ? 'class-pick-card__icon'
+            : 'class-chart-dd__trigger-icon'
+        }
+      />
+    )
+  }
+  return (
+    <span
+      className={
+        size === 'card'
+          ? 'class-pick-card__icon-fallback'
+          : 'class-chart-dd__trigger-icon-fallback'
+      }
+      aria-hidden
+    >
+      {name.slice(0, 1)}
+    </span>
+  )
+}
+
+function ClassLevelChartDropdown({
+  level,
+  classes,
+  selectedId,
+  isOpen,
+  onToggle,
+  onSelect,
+  onClearThisTier,
+  hasSelectionForThisTier,
+}: {
+  level: number
+  classes: ForceClass[]
+  selectedId: string | null
+  isOpen: boolean
+  onToggle: () => void
+  onSelect: (c: ForceClass) => void
+  onClearThisTier: () => void
+  hasSelectionForThisTier: boolean
+}) {
+  const picked = selectedId
+    ? classes.find((c) => c.id === selectedId)
+    : undefined
+  const triggerLabel = picked ? picked.name : `Level ${level}`
+
+  return (
+    <div className="class-chart-dd">
+      <button
+        type="button"
+        className="class-chart-dd__trigger"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        id={`class-chart-trigger-${level}`}
+        onClick={onToggle}
+      >
+        <span className="class-chart-dd__trigger-main">
+          {picked ? (
+            <ClassIconBadge
+              classId={picked.id}
+              name={picked.name}
+              size="trigger"
+            />
+          ) : null}
+          <span className="class-chart-dd__trigger-text">{triggerLabel}</span>
+        </span>
+        <span className="class-chart-dd__chev" aria-hidden>
+          ▼
+        </span>
+      </button>
+      {isOpen ? (
+        <div className="class-chart-dd__panel">
+          <div
+            className="class-chart-dd__scroll class-pick-grid-cards"
+            role="listbox"
+            aria-labelledby={`class-chart-trigger-${level}`}
+          >
+            {classes.map((c) => {
+                const isSelected = selectedId === c.id
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={`class-pick-card${isSelected ? ' class-pick-card--selected' : ''}`}
+                    onClick={() => onSelect(c)}
+                  >
+                    <div className="class-pick-card__head">
+                      <ClassIconBadge
+                        classId={c.id}
+                        name={c.name}
+                        size="card"
+                      />
+                      <span className="class-pick-card__name">{c.name}</span>
+                    </div>
+                    <dl className="class-pick-card__dl">
+                      <dt>SPD</dt>
+                      <dd>{c.speed}</dd>
+                      <dt>HP</dt>
+                      <dd>{c.health}</dd>
+                      <dt>Mel</dt>
+                      <dd>{c.melee}</dd>
+                      <dt>Rng</dt>
+                      <dd>{c.ranged}</dd>
+                      <dt>Def</dt>
+                      <dd>{c.defense}</dd>
+                      <dt>Will</dt>
+                      <dd>{c.willpower}</dd>
+                      <dt>Picks</dt>
+                      <dd>{c.characteristics}</dd>
+                    </dl>
+                    <p className="class-pick-card__eq">{c.equipment}</p>
+                  </button>
+                )
+              })}
+          </div>
+          {hasSelectionForThisTier ? (
+            <div className="class-chart-dd__footer">
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClearThisTier()
+                }}
+              >
+                Clear selection
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function App() {
   const [initialPersisted] = useState(loadPersisted)
   const [view, setView] = useState<AppView>(() =>
@@ -369,6 +525,10 @@ function App() {
   const [traitFilter, setTraitFilter] = useState('')
   const [weaponTraitFilter, setWeaponTraitFilter] = useState('')
   const [spellFilter, setSpellFilter] = useState('')
+  const [classChartOpenLevel, setClassChartOpenLevel] = useState<number | null>(
+    null,
+  )
+  const classChartPickRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     savePersisted({ characters, forcePointBudget, forceName })
@@ -389,6 +549,31 @@ function App() {
   useEffect(() => {
     if (view === 'forceName') setupForceNameInputRef.current?.focus()
   }, [view])
+
+  useEffect(() => {
+    if (step !== 'class') setClassChartOpenLevel(null)
+  }, [step])
+
+  useEffect(() => {
+    if (classChartOpenLevel === null) return
+    const onDoc = (e: MouseEvent) => {
+      if (
+        classChartPickRef.current &&
+        !classChartPickRef.current.contains(e.target as Node)
+      ) {
+        setClassChartOpenLevel(null)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setClassChartOpenLevel(null)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [classChartOpenLevel])
 
   const rosterPointsUsed = useMemo(
     () => totalForcePointsUsed(characters),
@@ -1198,7 +1383,10 @@ function App() {
         )}
 
         {view === 'wizard' && step === 'class' && (
-          <section className="panel" aria-labelledby="step-class">
+          <section
+            className="panel panel--class-step"
+            aria-labelledby="step-class"
+          >
             <p className="panel__kicker">
               Step {wizardStepNum} of {wizardStepTotal}
             </p>
@@ -1223,83 +1411,52 @@ function App() {
                 </span>
               )}
             </p>
-            <div className="class-pick-grid" role="group" aria-label="Class by level">
+            <div
+              ref={classChartPickRef}
+              className="class-chart-stack"
+              role="group"
+              aria-label="Choose class by level"
+            >
               {Array.from(
                 { length: CLASS_TIER_MAX - CLASS_TIER_MIN + 1 },
                 (_, i) => {
                   const lv = CLASS_TIER_MIN + i
                   const atTier = GAME_CLASSES.filter((c) => c.level === lv)
-                  const value =
-                    draft.level === lv && draft.classId ? draft.classId : ''
-                  const iconSrc = value ? getClassIconUrl(value) : undefined
-                  const picked = value ? getClassById(value) : undefined
+                  const selectedId =
+                    draft.level === lv && draft.classId ? draft.classId : null
                   return (
-                    <div key={lv} className="class-pick-row">
-                      <label
-                        className="class-pick-row__label"
-                        htmlFor={`class-tier-${lv}`}
-                      >
-                        <span className="class-pick-row__tier">Level {lv}</span>
-                        <span className="class-pick-row__cost">{lv} pt{lv === 1 ? '' : 's'}</span>
-                      </label>
-                      <div className="class-pick-row__control">
-                        {iconSrc ? (
-                          <img
-                            className="class-pick-row__icon"
-                            src={iconSrc}
-                            alt=""
-                            width={48}
-                            height={48}
-                          />
-                        ) : value ? (
-                          <span
-                            className="class-pick-row__icon class-pick-row__icon--initial"
-                            aria-hidden="true"
-                          >
-                            {(picked?.name ?? '?').slice(0, 1)}
-                          </span>
-                        ) : (
-                          <span
-                            className="class-pick-row__icon class-pick-row__icon--placeholder"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <select
-                          id={`class-tier-${lv}`}
-                          className="field__input field__select class-pick-row__select"
-                          value={value}
-                          onChange={(e) => {
-                            const id = e.target.value
-                            if (!id) {
-                              setDraft((d) => {
-                                if (d.level !== lv) return d
-                                return {
-                                  ...d,
-                                  classId: null,
-                                  level: CLASS_TIER_MIN,
-                                }
-                              })
-                              return
-                            }
-                            const cls = getClassById(id)
-                            if (cls?.level === lv) {
-                              setDraft((d) => ({
-                                ...d,
-                                classId: id,
-                                level: lv,
-                              }))
-                            }
-                          }}
-                        >
-                          <option value="">— Select —</option>
-                          {atTier.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                    <ClassLevelChartDropdown
+                      key={lv}
+                      level={lv}
+                      classes={atTier}
+                      selectedId={selectedId}
+                      isOpen={classChartOpenLevel === lv}
+                      onToggle={() =>
+                        setClassChartOpenLevel((o) => (o === lv ? null : lv))
+                      }
+                      onSelect={(c) => {
+                        setDraft((d) => ({
+                          ...d,
+                          classId: c.id,
+                          level: lv,
+                        }))
+                        setClassChartOpenLevel(null)
+                      }}
+                      onClearThisTier={() => {
+                        setDraft((d) => {
+                          if (d.level !== lv) return d
+                          return {
+                            ...d,
+                            classId: null,
+                            level: CLASS_TIER_MIN,
+                          }
+                        })
+                        setClassChartOpenLevel(null)
+                      }}
+                      hasSelectionForThisTier={
+                        draft.level === lv && draft.classId !== null
+                      }
+                    />
                   )
                 },
               )}
