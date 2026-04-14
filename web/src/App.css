@@ -815,6 +815,51 @@
   max-width: 40rem;
 }
 
+.weapon-weight-picker {
+  margin: 0 0 1rem;
+}
+
+.weapon-weight-picker__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.weapon-weight-picker__btn {
+  flex: 1 1 5.5rem;
+  min-width: 5rem;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cs-text);
+  background: var(--cs-input-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.weapon-weight-picker__btn:hover {
+  border-color: rgba(0, 255, 136, 0.35);
+}
+
+.weapon-weight-picker__btn--selected {
+  border-color: var(--cs-green);
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--cs-green);
+}
+
+.weapon-weight-picker__btn:focus-visible {
+  outline: 2px solid var(--cs-green);
+  outline-offset: 2px;
+}
+
 .trait-counter {
   margin: -0.5rem 0 1rem;
   font-family: var(--cs-mono);
@@ -900,6 +945,32 @@
   color: var(--cs-green);
 }
 
+.char-card__weapon-weight {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.65rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 255, 136, 0.12);
+  font-size: 0.75rem;
+}
+
+.char-card__weapon-weight-label {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+
+.char-card__weapon-weight-value {
+  font-family: var(--cs-mono);
+  font-weight: 600;
+  color: var(--cs-green);
+}
+
 .char-card__trait-list {
   list-style: none;
   margin: 0;
@@ -953,6 +1024,11 @@
   margin-top: 1.25rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--cs-border);
+}
+
+.sheet__weapon-weight {
+  margin: 0 0 0.85rem;
+  font-size: 0.9375rem;
 }
 
 .sheet__traits-list {
@@ -1465,19 +1541,6 @@
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--cs-text);
-}
-
-.sheet__discipline {
-  margin-top: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--cs-border);
-}
-
-.sheet__discipline-name {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--cs-green);
 }
 
 .actions {

@@ -26,7 +26,7 @@ import {
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
-const STORAGE_VERSION = 7
+const STORAGE_VERSION = 9
 /** Default force budget (each character costs points equal to their class tier / level). */
 const DEFAULT_FORCE_POINT_BUDGET = 12
 const FORCE_POINT_BUDGET_MIN = 1
@@ -43,6 +43,12 @@ type Step =
   | 'spells'
   | 'sheet'
 
+type WeaponWeight = 'light' | 'medium' | 'heavy'
+
+function formatWeaponWeight(w: WeaponWeight): string {
+  return w.charAt(0).toUpperCase() + w.slice(1)
+}
+
 type Character = {
   id: string
   name: string
@@ -52,6 +58,10 @@ type Character = {
   characteristicIds: string[]
   /** Weapon traits compatible with class equipment (see `weaponTraits.ts`). */
   weaponTraitIds: string[]
+  /**
+   * Chosen weapon weight when the class has a weapon line; otherwise null.
+   */
+  weaponWeight: WeaponWeight | null
   /** Spells — only for classes whose equipment includes “spell”. */
   spellIds: string[]
   /** Current hit points (0 … class max HP). */
@@ -67,6 +77,7 @@ type WizardDraft = {
   level: number
   characteristicIds: string[]
   weaponTraitIds: string[]
+  weaponWeight: WeaponWeight | null
   spellIds: string[]
 }
 
@@ -76,6 +87,7 @@ const emptyDraft = (): WizardDraft => ({
   level: CLASS_TIER_MIN,
   characteristicIds: [],
   weaponTraitIds: [],
+  weaponWeight: null,
   spellIds: [],
 })
 
@@ -94,6 +106,11 @@ function normalizeCharacteristicIds(raw: unknown): string[] {
 }
 
 const validWeaponTraitId = new Set(WEAPON_TRAITS.map((t) => t.id))
+
+function normalizeWeaponWeight(raw: unknown): WeaponWeight | null {
+  if (raw === 'light' || raw === 'medium' || raw === 'heavy') return raw
+  return null
+}
 
 function normalizeWeaponTraitIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -160,6 +177,7 @@ function normalizeCharacter(x: unknown): Character | null {
     level: o.level,
     characteristicIds: normalizeCharacteristicIds(o.characteristicIds),
     weaponTraitIds: normalizeWeaponTraitIds(o.weaponTraitIds),
+    weaponWeight: normalizeWeaponWeight(o.weaponWeight),
     spellIds: normalizeSpellIds(o.spellIds),
     currentHp,
     reacted: o.reacted === true,
@@ -167,11 +185,17 @@ function normalizeCharacter(x: unknown): Character | null {
   }
 }
 
+function parseForceHubActive(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== 'object') return false
+  return (parsed as { forceHubActive?: unknown }).forceHubActive === true
+}
+
 function loadPersisted(): PersistedPayload {
   const empty = (): PersistedPayload => ({
     characters: [],
     forcePointBudget: DEFAULT_FORCE_POINT_BUDGET,
     forceName: '',
+    forceHubActive: false,
   })
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -203,6 +227,8 @@ function loadPersisted(): PersistedPayload {
       const ver = (parsed as { version: unknown }).version
       if (
         ver === STORAGE_VERSION ||
+        ver === 8 ||
+        ver === 7 ||
         ver === 6 ||
         ver === 5 ||
         ver === 4 ||
@@ -212,7 +238,8 @@ function loadPersisted(): PersistedPayload {
         const characters = (parsed as { characters: unknown[] }).characters
           .map(normalizeCharacter)
           .filter((c): c is Character => c !== null)
-        return { characters, forcePointBudget, forceName }
+        const forceHubActive = parseForceHubActive(parsed)
+        return { characters, forcePointBudget, forceName, forceHubActive }
       }
     }
 
@@ -243,12 +270,14 @@ function loadPersisted(): PersistedPayload {
               activated: false,
               characteristicIds: [],
               weaponTraitIds: [],
+              weaponWeight: null,
               spellIds: [],
               currentHp: getClassById(classId)?.health ?? 10,
             },
           ],
           forcePointBudget,
           forceName: '',
+          forceHubActive: false,
         }
       }
     }
@@ -286,11 +315,17 @@ type PersistedPayload = {
   forcePointBudget: number
   /** Name for this force (team / roster); editable from the roster top bar. */
   forceName: string
+  /**
+   * True once the user has opened the force hub (roster) for this slot — keeps
+   * an empty new force on the roster after refresh until they clear storage.
+   */
+  forceHubActive: boolean
 }
 
-type AppView = 'landing' | 'forceName' | 'forceBudget' | 'roster' | 'wizard'
+type AppView = 'landing' | 'roster' | 'wizard'
 
 function initialAppView(p: PersistedPayload): AppView {
+  if (p.forceHubActive) return 'roster'
   if (p.characters.length > 0) return 'roster'
   if (normalizeForceName(p.forceName)) return 'roster'
   return 'landing'
@@ -304,6 +339,7 @@ function savePersisted(payload: PersistedPayload) {
       characters: payload.characters,
       forcePointBudget: payload.forcePointBudget,
       forceName: normalizeForceName(payload.forceName),
+      forceHubActive: payload.forceHubActive,
     }),
   )
 }
@@ -514,11 +550,15 @@ function App() {
     initialPersisted.forcePointBudget,
   )
   const [forceName, setForceName] = useState(initialPersisted.forceName)
+  const [forceHubActive, setForceHubActive] = useState(
+    () =>
+      initialPersisted.forceHubActive ||
+      initialPersisted.characters.length > 0 ||
+      !!normalizeForceName(initialPersisted.forceName),
+  )
   const [editingForceName, setEditingForceName] = useState(false)
   const [forceNameDraft, setForceNameDraft] = useState('')
-  const [setupForceNameInput, setSetupForceNameInput] = useState('')
   const topbarForceNameInputRef = useRef<HTMLInputElement>(null)
-  const setupForceNameInputRef = useRef<HTMLInputElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<WizardDraft>(emptyDraft)
   const [step, setStep] = useState<Step>('name')
@@ -531,8 +571,13 @@ function App() {
   const classChartPickRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    savePersisted({ characters, forcePointBudget, forceName })
-  }, [characters, forcePointBudget, forceName])
+    savePersisted({
+      characters,
+      forcePointBudget,
+      forceName,
+      forceHubActive,
+    })
+  }, [characters, forcePointBudget, forceName, forceHubActive])
 
   useEffect(() => {
     if (view !== 'roster') setEditingForceName(false)
@@ -545,10 +590,6 @@ function App() {
       el?.select()
     }
   }, [view, editingForceName])
-
-  useEffect(() => {
-    if (view === 'forceName') setupForceNameInputRef.current?.focus()
-  }, [view])
 
   useEffect(() => {
     if (step !== 'class') setClassChartOpenLevel(null)
@@ -628,8 +669,15 @@ function App() {
       const spellSame =
         nextSpell.length === d.spellIds.length &&
         nextSpell.every((id, i) => id === d.spellIds[i])
-      if (weaponSame && spellSame) return d
-      return { ...d, weaponTraitIds: nextWeapon, spellIds: nextSpell }
+      const nextWeight = hasWeapons ? d.weaponWeight : null
+      const weightSame = nextWeight === d.weaponWeight
+      if (weaponSame && spellSame && weightSame) return d
+      return {
+        ...d,
+        weaponTraitIds: nextWeapon,
+        spellIds: nextSpell,
+        weaponWeight: nextWeight,
+      }
     })
   }, [draft.classId])
 
@@ -649,7 +697,8 @@ function App() {
     canAdvanceClassStep &&
     selectedClass !== null &&
     canAdvanceCharacteristicsStep &&
-    withinForceBudget
+    withinForceBudget &&
+    (!classHasWeaponsAccess || draft.weaponWeight !== null)
 
   const toggleCharacteristic = useCallback((id: string) => {
     setDraft((d) => {
@@ -784,48 +833,14 @@ function App() {
     setCharacters([])
     setForcePointBudget(DEFAULT_FORCE_POINT_BUDGET)
     setForceName('')
-    setSetupForceNameInput('')
+    setForceHubActive(true)
     setEditingId(null)
     setDraft(emptyDraft())
     setStep('name')
     setTraitFilter('')
     setWeaponTraitFilter('')
     setSpellFilter('')
-    setView('forceName')
-  }, [])
-
-  const backFromForceNameToLanding = useCallback(() => {
-    setView('landing')
-  }, [])
-
-  const completeForceNaming = useCallback(() => {
-    const n = normalizeForceName(setupForceNameInput)
-    if (!n) return
-    setForceName(n)
-    setEditingId(null)
-    setStep('name')
-    setTraitFilter('')
-    setWeaponTraitFilter('')
-    setSpellFilter('')
-    setView('forceBudget')
-  }, [setupForceNameInput])
-
-  const backFromForceBudgetToForceNaming = useCallback(() => {
-    setSetupForceNameInput(forceName)
-    setView('forceName')
-  }, [forceName])
-
-  const completeForceBudgetSetup = useCallback(() => {
-    setEditingId(null)
-    setStep('name')
-    setTraitFilter('')
-    setWeaponTraitFilter('')
-    setSpellFilter('')
-    setView('wizard')
-  }, [])
-
-  const backFromCharacterNameToForceNaming = useCallback(() => {
-    setView('forceBudget')
+    setView('roster')
   }, [])
 
   const startNewCharacter = useCallback(() => {
@@ -855,6 +870,7 @@ function App() {
         MAX_PLAYER_CHARACTERISTICS,
       ),
       weaponTraitIds: [...c.weaponTraitIds],
+      weaponWeight: c.weaponWeight,
       spellIds: [...c.spellIds],
     })
     setTraitFilter('')
@@ -865,6 +881,7 @@ function App() {
   }, [])
 
   const goToRoster = useCallback(() => {
+    setForceHubActive(true)
     setView('roster')
     setEditingId(null)
     setDraft(emptyDraft())
@@ -911,6 +928,11 @@ function App() {
               )
             })
           : [],
+        weaponWeight: classEquipmentHasWeapons(
+          getClassById(classId)?.equipment ?? '',
+        )
+          ? draft.weaponWeight
+          : null,
         spellIds:
           classEquipmentHasSpells(getClassById(classId)?.equipment ?? '')
             ? draft.spellIds.filter((id) => validSpellId.has(id))
@@ -1106,10 +1128,7 @@ function App() {
 
       <main
         className={
-          view === 'landing' ||
-          view === 'forceName' ||
-          view === 'forceBudget' ||
-          (view === 'wizard' && step === 'name')
+          view === 'landing' || (view === 'wizard' && step === 'name')
             ? 'main main--intro'
             : 'main'
         }
@@ -1125,89 +1144,6 @@ function App() {
               Create New Force
             </button>
           </div>
-        )}
-
-        {view === 'forceName' && (
-          <section className="panel setup-force" aria-labelledby="setup-force-title">
-            <p className="panel__kicker">New force</p>
-            <h2 id="setup-force-title" className="panel__title">
-              Name your force
-            </h2>
-            <label className="field">
-              <input
-                ref={setupForceNameInputRef}
-                className="field__input"
-                type="text"
-                autoComplete="off"
-                maxLength={120}
-                placeholder="e.g. The Fallen, Lords of Chaos"
-                value={setupForceNameInput}
-                onChange={(e) => setSetupForceNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    completeForceNaming()
-                  }
-                }}
-              />
-            </label>
-          </section>
-        )}
-
-        {view === 'forceBudget' && (
-          <section
-            className="panel setup-force-budget setup-force-budget--minimal"
-            aria-labelledby="setup-budget-masthead"
-          >
-            <p className="panel__kicker">New force</p>
-            <h2 id="setup-budget-masthead" className="panel__title">
-              Set your point budget
-            </h2>
-            <p className="panel__lead">
-              Each character costs points equal to their class level. Set your force's total budget, then build within it.
-            </p>
-            <div className="setup-force-budget__stepper-only">
-              <div
-                className="stepper setup-force-budget__stepper"
-                role="group"
-                aria-label={`Force point budget (${FORCE_POINT_BUDGET_MIN}–${FORCE_POINT_BUDGET_MAX})`}
-              >
-                <button
-                  type="button"
-                  className="stepper__btn"
-                  onClick={() =>
-                    setForcePointBudget((n) =>
-                      stepInt(n, FORCE_POINT_BUDGET_MIN, FORCE_POINT_BUDGET_MAX, -1),
-                    )
-                  }
-                  disabled={forcePointBudget <= FORCE_POINT_BUDGET_MIN}
-                  aria-label="Decrease budget"
-                >
-                  –
-                </button>
-                <output
-                  id="setup-force-point-budget"
-                  className="stepper__value force-budget__slider-num"
-                  aria-live="polite"
-                >
-                  {forcePointBudget}
-                </output>
-                <button
-                  type="button"
-                  className="stepper__btn"
-                  onClick={() =>
-                    setForcePointBudget((n) =>
-                      stepInt(n, FORCE_POINT_BUDGET_MIN, FORCE_POINT_BUDGET_MAX, 1),
-                    )
-                  }
-                  disabled={forcePointBudget >= FORCE_POINT_BUDGET_MAX}
-                  aria-label="Increase budget"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </section>
         )}
 
         {view === 'roster' && (
@@ -1527,6 +1463,35 @@ function App() {
             <h2 id="step-weapon-traits" className="panel__title">
               Choose weapon traits
             </h2>
+            <div
+              className="weapon-weight-picker"
+              role="radiogroup"
+              aria-labelledby="weapon-weight-label"
+            >
+              <p id="weapon-weight-label" className="field__label">
+                Weapon weight
+              </p>
+              <div className="weapon-weight-picker__buttons">
+                {(['light', 'medium', 'heavy'] as const).map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    role="radio"
+                    aria-checked={draft.weaponWeight === w}
+                    className={`weapon-weight-picker__btn${
+                      draft.weaponWeight === w
+                        ? ' weapon-weight-picker__btn--selected'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      setDraft((d) => ({ ...d, weaponWeight: w }))
+                    }
+                  >
+                    {formatWeaponWeight(w)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="trait-counter" aria-live="polite">
               Selected {draft.weaponTraitIds.length}
               {draft.weaponTraitIds.length === 1 ? ' trait' : ' traits'}
@@ -1729,24 +1694,34 @@ function App() {
 
             {selectedClass &&
               classEquipmentHasWeapons(selectedClass.equipment) &&
-              draft.weaponTraitIds.length > 0 && (
+              (draft.weaponWeight !== null || draft.weaponTraitIds.length > 0) && (
               <div className="sheet__traits">
-                <h3 className="sheet__section-title">Weapon traits</h3>
-                <ol className="sheet__traits-list">
-                  {draft.weaponTraitIds.map((tid) => {
-                    const t = getWeaponTraitById(tid)
-                    return (
-                      <li key={tid}>
-                        <strong className="sheet__trait-name">
-                          {t?.name ?? tid}
-                        </strong>
-                        <p className="sheet__muted sheet__trait-body">
-                          {t?.description ?? '—'}
-                        </p>
-                      </li>
-                    )
-                  })}
-                </ol>
+                <h3 className="sheet__section-title">Weapon</h3>
+                <p className="sheet__weapon-weight">
+                  <span className="sheet__muted">Weight — </span>
+                  <strong>
+                    {draft.weaponWeight
+                      ? formatWeaponWeight(draft.weaponWeight)
+                      : '—'}
+                  </strong>
+                </p>
+                {draft.weaponTraitIds.length > 0 ? (
+                  <ol className="sheet__traits-list">
+                    {draft.weaponTraitIds.map((tid) => {
+                      const t = getWeaponTraitById(tid)
+                      return (
+                        <li key={tid}>
+                          <strong className="sheet__trait-name">
+                            {t?.name ?? tid}
+                          </strong>
+                          <p className="sheet__muted sheet__trait-body">
+                            {t?.description ?? '—'}
+                          </p>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                ) : null}
               </div>
             )}
 
@@ -1772,61 +1747,12 @@ function App() {
                   </ol>
                 </div>
               )}
-
-            {selectedClass && (
-              <div className="sheet__discipline">
-                <h3 className="sheet__section-title">Equipment</h3>
-                <p className="sheet__discipline-name">{selectedClass.name}</p>
-                <p className="sheet__muted">{selectedClass.equipment}</p>
-              </div>
-            )}
           </section>
         )}
       </main>
 
       {view !== 'landing' && (
         <footer className="actions">
-        {view === 'forceName' && (
-          <>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={backFromForceNameToLanding}
-            >
-              Back
-            </button>
-            <div className="actions__spacer" />
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={completeForceNaming}
-              disabled={!normalizeForceName(setupForceNameInput)}
-            >
-              Continue
-            </button>
-          </>
-        )}
-
-        {view === 'forceBudget' && (
-          <>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={backFromForceBudgetToForceNaming}
-            >
-              Back
-            </button>
-            <div className="actions__spacer" />
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={completeForceBudgetSetup}
-            >
-              Continue
-            </button>
-          </>
-        )}
-
         {view === 'roster' && (
           <>
             {characters.length > 0 && (
@@ -1852,21 +1778,13 @@ function App() {
 
         {view === 'wizard' && step !== 'sheet' && (
           <>
-            {step === 'name' &&
-            editingId === null &&
-            characters.length === 0 ? (
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={backFromCharacterNameToForceNaming}
-              >
-                Back
-              </button>
-            ) : step !== 'name' ? (
-              <button type="button" className="btn btn--ghost" onClick={goBack}>
-                Back
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={step === 'name' ? goToRoster : goBack}
+            >
+              Back
+            </button>
             <div className="actions__spacer" />
             <button
               type="button"
@@ -1875,7 +1793,10 @@ function App() {
               disabled={
                 (step === 'name' && !canAdvanceName) ||
                 (step === 'class' && !canAdvanceClassStep) ||
-                (step === 'characteristics' && !canAdvanceCharacteristicsStep)
+                (step === 'characteristics' && !canAdvanceCharacteristicsStep) ||
+                (step === 'weaponTraits' &&
+                  classHasWeaponsAccess &&
+                  draft.weaponWeight === null)
               }
             >
               {(step === 'characteristics' &&
@@ -2035,12 +1956,20 @@ function RosterCard({
         classEquipmentHasWeapons(cls.equipment) && (
           <section
             className="char-card__characteristics"
-            aria-label="Weapon traits"
+            aria-label="Weapon"
           >
-            <h4 className="char-card__section-title">Weapon traits</h4>
+            <h4 className="char-card__section-title">Weapon</h4>
+            <p className="char-card__weapon-weight">
+              <span className="char-card__weapon-weight-label">Weight</span>
+              <span className="char-card__weapon-weight-value">
+                {character.weaponWeight
+                  ? formatWeaponWeight(character.weaponWeight)
+                  : '—'}
+              </span>
+            </p>
             {character.weaponTraitIds.length === 0 ? (
               <p className="char-card__traits char-card__traits--empty">
-                None selected — use <strong>Edit</strong> to add.
+                No traits — use <strong>Edit</strong> to add.
               </p>
             ) : (
               <ul className="char-card__trait-list">
