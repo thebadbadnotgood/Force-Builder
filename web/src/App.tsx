@@ -1616,12 +1616,6 @@ function App() {
                     <dt>Level</dt>
                     <dd>{draft.level}</dd>
                   </div>
-                  {selectedClass && (
-                    <div>
-                      <dt>Class slots</dt>
-                      <dd>{selectedClass.characteristics}</dd>
-                    </div>
-                  )}
                 </dl>
               </div>
               <div className="sheet__col sheet__col--wide">
