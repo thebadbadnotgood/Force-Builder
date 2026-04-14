@@ -860,6 +860,58 @@
   outline-offset: 2px;
 }
 
+.weapon-combat-stats {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 255, 136, 0.12);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.weapon-combat-stats__row {
+  margin: 0;
+}
+
+.weapon-combat-stats__row + .weapon-combat-stats__row {
+  margin-top: 0.4rem;
+}
+
+.weapon-combat-stats__row--unarmed .weapon-combat-stats__mono {
+  color: var(--cs-muted);
+  font-weight: 500;
+}
+
+.weapon-combat-stats__mono {
+  font-family: var(--cs-mono);
+  font-weight: 600;
+  color: var(--cs-green);
+}
+
+.weapon-combat-stats--sheet {
+  margin: 0 0 0.85rem;
+}
+
+.weapon-combat-stats--sheet .weapon-combat-stats__mono {
+  color: var(--cs-text);
+  font-weight: 500;
+}
+
+.weapon-combat-stats--sheet .weapon-combat-stats__row--unarmed .weapon-combat-stats__mono {
+  color: var(--cs-muted);
+}
+
+.weapon-combat-stats--card {
+  margin: 0 0 0.65rem;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.72rem;
+}
+
+.weapon-combat-stats--card .weapon-combat-stats__mono {
+  font-size: inherit;
+}
+
 .trait-counter {
   margin: -0.5rem 0 1rem;
   font-family: var(--cs-mono);
