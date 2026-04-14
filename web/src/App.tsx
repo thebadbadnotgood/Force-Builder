@@ -445,44 +445,44 @@ function ClassLevelChartDropdown({
             aria-labelledby={`class-chart-trigger-${level}`}
           >
             {classes.map((c) => {
-                const isSelected = selectedId === c.id
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    className={`class-pick-card${isSelected ? ' class-pick-card--selected' : ''}`}
-                    onClick={() => onSelect(c)}
-                  >
-                    <div className="class-pick-card__head">
-                      <ClassIconBadge
-                        classId={c.id}
-                        name={c.name}
-                        size="card"
-                      />
-                      <span className="class-pick-card__name">{c.name}</span>
-                    </div>
-                    <dl className="class-pick-card__dl">
-                      <dt>SPD</dt>
-                      <dd>{c.speed}</dd>
-                      <dt>HP</dt>
-                      <dd>{c.health}</dd>
-                      <dt>Mel</dt>
-                      <dd>{c.melee}</dd>
-                      <dt>Rng</dt>
-                      <dd>{c.ranged}</dd>
-                      <dt>Def</dt>
-                      <dd>{c.defense}</dd>
-                      <dt>Will</dt>
-                      <dd>{c.willpower}</dd>
-                      <dt>Picks</dt>
-                      <dd>{c.characteristics}</dd>
-                    </dl>
-                    <p className="class-pick-card__eq">{c.equipment}</p>
-                  </button>
-                )
-              })}
+              const isSelected = selectedId === c.id
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`class-pick-card${isSelected ? ' class-pick-card--selected' : ''}`}
+                  onClick={() => onSelect(c)}
+                >
+                  <div className="class-pick-card__head">
+                    <ClassIconBadge
+                      classId={c.id}
+                      name={c.name}
+                      size="card"
+                    />
+                    <span className="class-pick-card__name">{c.name}</span>
+                  </div>
+                  <dl className="class-pick-card__dl">
+                    <dt>SPD</dt>
+                    <dd>{c.speed}</dd>
+                    <dt>HP</dt>
+                    <dd>{c.health}</dd>
+                    <dt>Mel</dt>
+                    <dd>{c.melee}</dd>
+                    <dt>Rng</dt>
+                    <dd>{c.ranged}</dd>
+                    <dt>Def</dt>
+                    <dd>{c.defense}</dd>
+                    <dt>Will</dt>
+                    <dd>{c.willpower}</dd>
+                    <dt>Picks</dt>
+                    <dd>{c.characteristics}</dd>
+                  </dl>
+                  <p className="class-pick-card__eq">{c.equipment}</p>
+                </button>
+              )
+            })}
           </div>
           {hasSelectionForThisTier ? (
             <div className="class-chart-dd__footer">
@@ -1583,10 +1583,6 @@ function App() {
             <h2 id="step-spells" className="panel__title">
               Choose spells
             </h2>
-            <p className="panel__lead">
-              Your class equipment includes spells — pick any you want on this
-              character. Search to narrow the list.
-            </p>
             <p className="trait-counter" aria-live="polite">
               Selected {draft.spellIds.length}
               {draft.spellIds.length === 1 ? ' spell' : ' spells'}
