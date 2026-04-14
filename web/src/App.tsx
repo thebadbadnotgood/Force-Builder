@@ -660,8 +660,8 @@ function App() {
       if (!ro) {
         ro = new ResizeObserver(update)
         ro.observe(panel)
+        /* No scroll listener: viewport overlap fluctuates while padding moves the footer. */
         window.addEventListener('resize', update)
-        window.addEventListener('scroll', update, { passive: true })
       }
     }
 
@@ -677,7 +677,6 @@ function App() {
       cancelAnimationFrame(raf2)
       ro?.disconnect()
       window.removeEventListener('resize', update)
-      window.removeEventListener('scroll', update)
     }
   }, [classChartOpenLevel, view, step])
 
