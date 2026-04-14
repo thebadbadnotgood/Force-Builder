@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react'
 import {
   CLASS_TIER_MAX,
   CLASS_TIER_MIN,
@@ -26,7 +34,7 @@ import {
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
-const STORAGE_VERSION = 9
+const STORAGE_VERSION = 10
 /** Default force budget (each character costs points equal to their class tier / level). */
 const DEFAULT_FORCE_POINT_BUDGET = 12
 const FORCE_POINT_BUDGET_MIN = 1
@@ -43,9 +51,9 @@ type Step =
   | 'spells'
   | 'sheet'
 
-type WeaponWeight = 'light' | 'medium' | 'heavy'
+type WeaponType = 'light' | 'medium' | 'heavy'
 
-function formatWeaponWeight(w: WeaponWeight): string {
+function formatWeaponType(w: WeaponType): string {
   return w.charAt(0).toUpperCase() + w.slice(1)
 }
 
@@ -59,9 +67,9 @@ type Character = {
   /** Weapon traits compatible with class equipment (see `weaponTraits.ts`). */
   weaponTraitIds: string[]
   /**
-   * Chosen weapon weight when the class has a weapon line; otherwise null.
+   * Chosen weapon type when the class has a weapon line; otherwise null.
    */
-  weaponWeight: WeaponWeight | null
+  weaponType: WeaponType | null
   /** Spells — only for classes whose equipment includes “spell”. */
   spellIds: string[]
   /** Current hit points (0 … class max HP). */
@@ -77,7 +85,7 @@ type WizardDraft = {
   level: number
   characteristicIds: string[]
   weaponTraitIds: string[]
-  weaponWeight: WeaponWeight | null
+  weaponType: WeaponType | null
   spellIds: string[]
 }
 
@@ -87,7 +95,7 @@ const emptyDraft = (): WizardDraft => ({
   level: CLASS_TIER_MIN,
   characteristicIds: [],
   weaponTraitIds: [],
-  weaponWeight: null,
+  weaponType: null,
   spellIds: [],
 })
 
@@ -107,7 +115,7 @@ function normalizeCharacteristicIds(raw: unknown): string[] {
 
 const validWeaponTraitId = new Set(WEAPON_TRAITS.map((t) => t.id))
 
-function normalizeWeaponWeight(raw: unknown): WeaponWeight | null {
+function normalizeWeaponType(raw: unknown): WeaponType | null {
   if (raw === 'light' || raw === 'medium' || raw === 'heavy') return raw
   return null
 }
@@ -177,7 +185,10 @@ function normalizeCharacter(x: unknown): Character | null {
     level: o.level,
     characteristicIds: normalizeCharacteristicIds(o.characteristicIds),
     weaponTraitIds: normalizeWeaponTraitIds(o.weaponTraitIds),
-    weaponWeight: normalizeWeaponWeight(o.weaponWeight),
+    weaponType: normalizeWeaponType(
+      (o as { weaponType?: unknown; weaponWeight?: unknown }).weaponType ??
+        (o as { weaponWeight?: unknown }).weaponWeight,
+    ),
     spellIds: normalizeSpellIds(o.spellIds),
     currentHp,
     reacted: o.reacted === true,
@@ -227,6 +238,7 @@ function loadPersisted(): PersistedPayload {
       const ver = (parsed as { version: unknown }).version
       if (
         ver === STORAGE_VERSION ||
+        ver === 9 ||
         ver === 8 ||
         ver === 7 ||
         ver === 6 ||
@@ -270,7 +282,7 @@ function loadPersisted(): PersistedPayload {
               activated: false,
               characteristicIds: [],
               weaponTraitIds: [],
-              weaponWeight: null,
+              weaponType: null,
               spellIds: [],
               currentHp: getClassById(classId)?.health ?? 10,
             },
@@ -427,6 +439,7 @@ function ClassLevelChartDropdown({
   onSelect,
   onClearThisTier,
   hasSelectionForThisTier,
+  panelRef,
 }: {
   level: number
   classes: ForceClass[]
@@ -436,6 +449,7 @@ function ClassLevelChartDropdown({
   onSelect: (c: ForceClass) => void
   onClearThisTier: () => void
   hasSelectionForThisTier: boolean
+  panelRef?: Ref<HTMLDivElement | null>
 }) {
   const picked = selectedId
     ? classes.find((c) => c.id === selectedId)
@@ -467,7 +481,7 @@ function ClassLevelChartDropdown({
         </span>
       </button>
       {isOpen ? (
-        <div className="class-chart-dd__panel">
+        <div ref={panelRef} className="class-chart-dd__panel">
           <div
             className="class-chart-dd__scroll class-pick-grid-cards"
             role="listbox"
@@ -560,6 +574,8 @@ function App() {
     null,
   )
   const classChartPickRef = useRef<HTMLDivElement>(null)
+  const classPickerOpenPanelRef = useRef<HTMLDivElement | null>(null)
+  const [classPickerReservePx, setClassPickerReservePx] = useState(0)
 
   useEffect(() => {
     savePersisted({
@@ -606,6 +622,64 @@ function App() {
       document.removeEventListener('keydown', onKey)
     }
   }, [classChartOpenLevel])
+
+  useLayoutEffect(() => {
+    if (classChartOpenLevel === null || view !== 'wizard' || step !== 'class') {
+      setClassPickerReservePx(0)
+      return
+    }
+
+    const footer = document.querySelector('.actions') as HTMLElement | null
+    if (!footer) {
+      setClassPickerReservePx(0)
+      return
+    }
+
+    const CLEARANCE = 12
+    let ro: ResizeObserver | null = null
+    let cancelled = false
+
+    const update = () => {
+      if (cancelled) return
+      const panel = classPickerOpenPanelRef.current
+      if (!panel) {
+        setClassPickerReservePx(0)
+        return
+      }
+      const panelRect = panel.getBoundingClientRect()
+      const footerRect = footer.getBoundingClientRect()
+      const overlap = panelRect.bottom - footerRect.top + CLEARANCE
+      setClassPickerReservePx(Math.max(0, Math.ceil(overlap)))
+    }
+
+    const arm = () => {
+      if (cancelled) return
+      const panel = classPickerOpenPanelRef.current
+      if (!panel) return
+      update()
+      if (!ro) {
+        ro = new ResizeObserver(update)
+        ro.observe(panel)
+        window.addEventListener('resize', update)
+        window.addEventListener('scroll', update, { passive: true })
+      }
+    }
+
+    arm()
+    const raf1 = requestAnimationFrame(arm)
+    const raf2 = requestAnimationFrame(() => {
+      requestAnimationFrame(arm)
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      ro?.disconnect()
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update)
+    }
+  }, [classChartOpenLevel, view, step])
 
   const rosterPointsUsed = useMemo(
     () => totalForcePointsUsed(characters),
@@ -660,14 +734,14 @@ function App() {
       const spellSame =
         nextSpell.length === d.spellIds.length &&
         nextSpell.every((id, i) => id === d.spellIds[i])
-      const nextWeight = hasWeapons ? d.weaponWeight : null
-      const weightSame = nextWeight === d.weaponWeight
-      if (weaponSame && spellSame && weightSame) return d
+      const nextWeaponType = hasWeapons ? d.weaponType : null
+      const weaponTypeSame = nextWeaponType === d.weaponType
+      if (weaponSame && spellSame && weaponTypeSame) return d
       return {
         ...d,
         weaponTraitIds: nextWeapon,
         spellIds: nextSpell,
-        weaponWeight: nextWeight,
+        weaponType: nextWeaponType,
       }
     })
   }, [draft.classId])
@@ -689,7 +763,7 @@ function App() {
     selectedClass !== null &&
     canAdvanceCharacteristicsStep &&
     withinForceBudget &&
-    (!classHasWeaponsAccess || draft.weaponWeight !== null)
+    (!classHasWeaponsAccess || draft.weaponType !== null)
 
   const toggleCharacteristic = useCallback((id: string) => {
     setDraft((d) => {
@@ -847,7 +921,7 @@ function App() {
         MAX_PLAYER_CHARACTERISTICS,
       ),
       weaponTraitIds: [...c.weaponTraitIds],
-      weaponWeight: c.weaponWeight,
+      weaponType: c.weaponType,
       spellIds: [...c.spellIds],
     })
     setTraitFilter('')
@@ -905,10 +979,10 @@ function App() {
               )
             })
           : [],
-        weaponWeight: classEquipmentHasWeapons(
+        weaponType: classEquipmentHasWeapons(
           getClassById(classId)?.equipment ?? '',
         )
-          ? draft.weaponWeight
+          ? draft.weaponType
           : null,
         spellIds:
           classEquipmentHasSpells(getClassById(classId)?.equipment ?? '')
@@ -1106,6 +1180,11 @@ function App() {
       <main
         className={
           view === 'wizard' && step === 'name' ? 'main main--intro' : 'main'
+        }
+        style={
+          classPickerReservePx > 0
+            ? { paddingBottom: `calc(1.5rem + ${classPickerReservePx}px)` }
+            : undefined
         }
       >
         {view === 'roster' && (
@@ -1329,6 +1408,11 @@ function App() {
                       classes={atTier}
                       selectedId={selectedId}
                       isOpen={classChartOpenLevel === lv}
+                      panelRef={
+                        classChartOpenLevel === lv
+                          ? classPickerOpenPanelRef
+                          : undefined
+                      }
                       onToggle={() =>
                         setClassChartOpenLevel((o) => (o === lv ? null : lv))
                       }
@@ -1426,30 +1510,30 @@ function App() {
               Choose weapon traits
             </h2>
             <div
-              className="weapon-weight-picker"
+              className="weapon-type-picker"
               role="radiogroup"
-              aria-labelledby="weapon-weight-label"
+              aria-labelledby="weapon-type-label"
             >
-              <p id="weapon-weight-label" className="field__label">
-                Weapon weight
+              <p id="weapon-type-label" className="field__label">
+                Weapon type
               </p>
-              <div className="weapon-weight-picker__buttons">
+              <div className="weapon-type-picker__buttons">
                 {(['light', 'medium', 'heavy'] as const).map((w) => (
                   <button
                     key={w}
                     type="button"
                     role="radio"
-                    aria-checked={draft.weaponWeight === w}
-                    className={`weapon-weight-picker__btn${
-                      draft.weaponWeight === w
-                        ? ' weapon-weight-picker__btn--selected'
+                    aria-checked={draft.weaponType === w}
+                    className={`weapon-type-picker__btn${
+                      draft.weaponType === w
+                        ? ' weapon-type-picker__btn--selected'
                         : ''
                     }`}
                     onClick={() =>
-                      setDraft((d) => ({ ...d, weaponWeight: w }))
+                      setDraft((d) => ({ ...d, weaponType: w }))
                     }
                   >
-                    {formatWeaponWeight(w)}
+                    {formatWeaponType(w)}
                   </button>
                 ))}
               </div>
@@ -1650,16 +1734,16 @@ function App() {
 
             {selectedClass &&
               classEquipmentHasWeapons(selectedClass.equipment) &&
-              (draft.weaponWeight !== null || draft.weaponTraitIds.length > 0) && (
+              (draft.weaponType !== null || draft.weaponTraitIds.length > 0) && (
               <div className="sheet__traits">
                 <h3 className="sheet__section-title">Weapon</h3>
-                <p className="sheet__weapon-weight">
-                  <span className="sheet__muted">Weight — </span>
-                  <strong>
-                    {draft.weaponWeight
-                      ? formatWeaponWeight(draft.weaponWeight)
+                <p className="sheet__weapon-type">
+                  <span className="sheet__weapon-type-label">Type — </span>
+                  <span className="sheet__weapon-type-value">
+                    {draft.weaponType
+                      ? formatWeaponType(draft.weaponType)
                       : '—'}
-                  </strong>
+                  </span>
                 </p>
                 {draft.weaponTraitIds.length > 0 ? (
                   <ol className="sheet__traits-list">
@@ -1751,7 +1835,7 @@ function App() {
                 (step === 'characteristics' && !canAdvanceCharacteristicsStep) ||
                 (step === 'weaponTraits' &&
                   classHasWeaponsAccess &&
-                  draft.weaponWeight === null)
+                  draft.weaponType === null)
               }
             >
               {(step === 'characteristics' &&
@@ -1913,11 +1997,11 @@ function RosterCard({
             aria-label="Weapon"
           >
             <h4 className="char-card__section-title">Weapon</h4>
-            <p className="char-card__weapon-weight">
-              <span className="char-card__weapon-weight-label">Weight</span>
-              <span className="char-card__weapon-weight-value">
-                {character.weaponWeight
-                  ? formatWeaponWeight(character.weaponWeight)
+            <p className="char-card__weapon-type">
+              <span className="char-card__weapon-type-label">Type</span>
+              <span className="char-card__weapon-type-value">
+                {character.weaponType
+                  ? formatWeaponType(character.weaponType)
                   : '—'}
               </span>
             </p>

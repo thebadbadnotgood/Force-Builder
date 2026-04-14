@@ -707,7 +707,7 @@
 
 .main {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   flex: 1;
   padding: 1.5rem;
   display: flex;
@@ -815,18 +815,18 @@
   max-width: 40rem;
 }
 
-.weapon-weight-picker {
+.weapon-type-picker {
   margin: 0 0 1rem;
 }
 
-.weapon-weight-picker__buttons {
+.weapon-type-picker__buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.35rem;
 }
 
-.weapon-weight-picker__btn {
+.weapon-type-picker__btn {
   flex: 1 1 5.5rem;
   min-width: 5rem;
   margin: 0;
@@ -845,17 +845,17 @@
     background 0.15s ease;
 }
 
-.weapon-weight-picker__btn:hover {
+.weapon-type-picker__btn:hover {
   border-color: rgba(0, 255, 136, 0.35);
 }
 
-.weapon-weight-picker__btn--selected {
+.weapon-type-picker__btn--selected {
   border-color: var(--cs-green);
   background: rgba(0, 255, 136, 0.1);
   color: var(--cs-green);
 }
 
-.weapon-weight-picker__btn:focus-visible {
+.weapon-type-picker__btn:focus-visible {
   outline: 2px solid var(--cs-green);
   outline-offset: 2px;
 }
@@ -945,7 +945,7 @@
   color: var(--cs-green);
 }
 
-.char-card__weapon-weight {
+.char-card__weapon-type {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -958,14 +958,14 @@
   font-size: 0.75rem;
 }
 
-.char-card__weapon-weight-label {
+.char-card__weapon-type-label {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--cs-muted);
 }
 
-.char-card__weapon-weight-value {
+.char-card__weapon-type-value {
   font-family: var(--cs-mono);
   font-weight: 600;
   color: var(--cs-green);
@@ -1026,9 +1026,20 @@
   border-top: 1px solid var(--cs-border);
 }
 
-.sheet__weapon-weight {
+.sheet__weapon-type {
   margin: 0 0 0.85rem;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.sheet__weapon-type-label {
+  color: var(--cs-muted);
+}
+
+.sheet__weapon-type-value {
+  font-weight: 400;
+  color: var(--cs-text);
 }
 
 .sheet__traits-list {
@@ -1546,6 +1557,7 @@
 .actions {
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
