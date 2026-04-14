@@ -322,14 +322,7 @@ type PersistedPayload = {
   forceHubActive: boolean
 }
 
-type AppView = 'landing' | 'roster' | 'wizard'
-
-function initialAppView(p: PersistedPayload): AppView {
-  if (p.forceHubActive) return 'roster'
-  if (p.characters.length > 0) return 'roster'
-  if (normalizeForceName(p.forceName)) return 'roster'
-  return 'landing'
-}
+type AppView = 'roster' | 'wizard'
 
 function savePersisted(payload: PersistedPayload) {
   localStorage.setItem(
@@ -542,9 +535,7 @@ function ClassLevelChartDropdown({
 
 function App() {
   const [initialPersisted] = useState(loadPersisted)
-  const [view, setView] = useState<AppView>(() =>
-    initialAppView(initialPersisted),
-  )
+  const [view, setView] = useState<AppView>('roster')
   const [characters, setCharacters] = useState(initialPersisted.characters)
   const [forcePointBudget, setForcePointBudget] = useState(
     initialPersisted.forcePointBudget,
@@ -828,20 +819,6 @@ function App() {
       }
     }
   }, [step, selectedClass, classHasWeaponsAccess, classHasSpellsAccess])
-
-  const beginCreateNewForce = useCallback(() => {
-    setCharacters([])
-    setForcePointBudget(DEFAULT_FORCE_POINT_BUDGET)
-    setForceName('')
-    setForceHubActive(true)
-    setEditingId(null)
-    setDraft(emptyDraft())
-    setStep('name')
-    setTraitFilter('')
-    setWeaponTraitFilter('')
-    setSpellFilter('')
-    setView('roster')
-  }, [])
 
   const startNewCharacter = useCallback(() => {
     setEditingId(null)
@@ -1128,24 +1105,9 @@ function App() {
 
       <main
         className={
-          view === 'landing' || (view === 'wizard' && step === 'name')
-            ? 'main main--intro'
-            : 'main'
+          view === 'wizard' && step === 'name' ? 'main main--intro' : 'main'
         }
       >
-        {view === 'landing' && (
-          <div className="intro intro--button-only">
-            <button
-              type="button"
-              className="btn btn--primary intro__cta"
-              onClick={beginCreateNewForce}
-              aria-label="Create a new force"
-            >
-              Create New Force
-            </button>
-          </div>
-        )}
-
         {view === 'roster' && (
           <div className="roster">
             <section
@@ -1745,8 +1707,7 @@ function App() {
         )}
       </main>
 
-      {view !== 'landing' && (
-        <footer className="actions">
+      <footer className="actions">
         {view === 'roster' && (
           <>
             {characters.length > 0 && (
@@ -1828,8 +1789,7 @@ function App() {
             </button>
           </>
         )}
-        </footer>
-      )}
+      </footer>
     </div>
   )
 }
