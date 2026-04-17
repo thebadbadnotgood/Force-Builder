@@ -40,6 +40,9 @@ import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
 const STORAGE_VERSION = 11
+/** Shown when no force name is set — keep in sync across top bar, sheet, and tab title. */
+const FORCE_NAME_EMPTY_LABEL = 'Name your force'
+const DOCUMENT_TITLE_BASE = 'Cyber Savage — Force Builder'
 /** Default force budget (each character costs points equal to their class tier / level). */
 const DEFAULT_FORCE_POINT_BUDGET = 12
 const FORCE_POINT_BUDGET_MIN = 1
@@ -517,10 +520,11 @@ function ClassIconBadge({
 }: {
   classId: string
   name: string
-  size: 'card' | 'trigger'
+  size: 'card' | 'trigger' | 'roster'
 }) {
   const src = getClassIconUrl(classId)
-  const px = size === 'card' ? 48 : 36
+  const px =
+    size === 'card' ? 48 : size === 'roster' ? 44 : 36
   if (src) {
     return (
       <img
@@ -531,7 +535,9 @@ function ClassIconBadge({
         className={
           size === 'card'
             ? 'class-pick-card__icon'
-            : 'class-chart-dd__trigger-icon'
+            : size === 'roster'
+              ? 'char-card__class-icon'
+              : 'class-chart-dd__trigger-icon'
         }
       />
     )
@@ -541,7 +547,9 @@ function ClassIconBadge({
       className={
         size === 'card'
           ? 'class-pick-card__icon-fallback'
-          : 'class-chart-dd__trigger-icon-fallback'
+          : size === 'roster'
+            ? 'char-card__class-icon-fallback'
+            : 'class-chart-dd__trigger-icon-fallback'
       }
       aria-hidden
     >
@@ -668,25 +676,34 @@ function ClassLevelChartDropdown({
 }
 
 function App() {
-  const [initialPersisted] = useState(loadPersisted)
+  const [bootstrap] = useState(() => ({ p: loadPersisted() }))
   const [view, setView] = useState<AppView>('roster')
-  const [characters, setCharacters] = useState(initialPersisted.characters)
+  const [characters, setCharacters] = useState(bootstrap.p.characters)
   const [forcePointBudget, setForcePointBudget] = useState(
-    initialPersisted.forcePointBudget,
+    bootstrap.p.forcePointBudget,
   )
-  const [forceName, setForceName] = useState(initialPersisted.forceName)
+  const [forceName, setForceName] = useState(bootstrap.p.forceName)
   const [forceHubActive, setForceHubActive] = useState(
     () =>
-      initialPersisted.forceHubActive ||
-      initialPersisted.characters.length > 0 ||
-      !!normalizeForceName(initialPersisted.forceName),
+      bootstrap.p.forceHubActive ||
+      bootstrap.p.characters.length > 0 ||
+      !!normalizeForceName(bootstrap.p.forceName),
   )
   const [editingForceName, setEditingForceName] = useState(false)
   const [forceNameDraft, setForceNameDraft] = useState('')
+  const [sheetForceEditOpen, setSheetForceEditOpen] = useState(false)
+  const [sheetForceDraft, setSheetForceDraft] = useState('')
   const topbarForceNameInputRef = useRef<HTMLInputElement>(null)
+  const topbarForceBlurSkipRef = useRef(false)
+  const sheetForceInputRef = useRef<HTMLInputElement>(null)
+  const sheetForceBlurSkipRef = useRef(false)
+  const [sheetCharNameEditOpen, setSheetCharNameEditOpen] = useState(false)
+  const [sheetCharNameDraft, setSheetCharNameDraft] = useState('')
+  const sheetCharNameInputRef = useRef<HTMLInputElement>(null)
+  const sheetCharNameBlurSkipRef = useRef(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<WizardDraft>(emptyDraft)
-  const [step, setStep] = useState<Step>('name')
+  const [step, setStep] = useState<Step>('sheet')
   const [traitFilter, setTraitFilter] = useState('')
   const [weaponTraitFilter, setWeaponTraitFilter] = useState('')
   const [spellFilter, setSpellFilter] = useState('')
@@ -707,16 +724,47 @@ function App() {
   }, [characters, forcePointBudget, forceName, forceHubActive])
 
   useEffect(() => {
-    if (view !== 'roster') setEditingForceName(false)
-  }, [view])
+    if (!editingForceName) return
+    const el = topbarForceNameInputRef.current
+    el?.focus()
+    el?.select()
+  }, [editingForceName])
 
   useEffect(() => {
-    if (view === 'roster' && editingForceName) {
-      const el = topbarForceNameInputRef.current
+    if (!sheetForceEditOpen) setSheetForceDraft(forceName)
+  }, [forceName, sheetForceEditOpen])
+
+  useEffect(() => {
+    if (view !== 'wizard' || step !== 'sheet') {
+      setSheetForceEditOpen(false)
+      setSheetCharNameEditOpen(false)
+    }
+  }, [view, step])
+
+  useEffect(() => {
+    if (!sheetCharNameEditOpen) setSheetCharNameDraft(draft.name)
+  }, [draft.name, sheetCharNameEditOpen])
+
+  useEffect(() => {
+    if (sheetCharNameEditOpen) {
+      const el = sheetCharNameInputRef.current
+      el?.focus()
+      el?.select()
+      return
+    }
+    if (sheetForceEditOpen) {
+      const el = sheetForceInputRef.current
       el?.focus()
       el?.select()
     }
-  }, [view, editingForceName])
+  }, [sheetCharNameEditOpen, sheetForceEditOpen])
+
+  useEffect(() => {
+    const trimmed = forceName.trim()
+    document.title = trimmed
+      ? `${trimmed} — Force Builder`
+      : DOCUMENT_TITLE_BASE
+  }, [forceName])
 
   useEffect(() => {
     if (step !== 'class') setClassChartOpenLevel(null)
@@ -800,6 +848,19 @@ function App() {
     }
   }, [classChartOpenLevel, view, step])
 
+  useEffect(() => {
+    if (!editingId) return
+    if (!characters.some((c) => c.id === editingId)) {
+      setEditingId(null)
+      setDraft(emptyDraft())
+      setStep('sheet')
+      setTraitFilter('')
+      setWeaponTraitFilter('')
+      setSpellFilter('')
+      setClassChartOpenLevel(null)
+    }
+  }, [editingId, characters])
+
   const rosterPointsUsed = useMemo(
     () => totalForcePointsUsed(characters),
     [characters],
@@ -843,6 +904,16 @@ function App() {
       both: p.hasMelee && p.hasRanged,
     }
   }, [selectedClass])
+
+  useEffect(() => {
+    if (step === 'weaponTraits' && !classHasWeaponsAccess) {
+      setStep(editingId ? 'class' : 'sheet')
+      return
+    }
+    if (step === 'spells' && !classHasSpellsAccess) {
+      setStep(editingId ? 'class' : 'sheet')
+    }
+  }, [step, classHasWeaponsAccess, classHasSpellsAccess, editingId])
 
   useEffect(() => {
     const cls = draft.classId ? getClassById(draft.classId) : null
@@ -1004,71 +1075,51 @@ function App() {
     )
   }, [classHasSpellsAccess, spellFilter])
 
-  const goNext = useCallback(() => {
-    if (step === 'name' && canAdvanceName) setStep('class')
-    else if (step === 'class' && canAdvanceClassStep) {
-      setTraitFilter('')
-      setWeaponTraitFilter('')
-      setSpellFilter('')
-      setStep('characteristics')
-    } else if (step === 'characteristics' && canAdvanceCharacteristicsStep) {
-      setWeaponTraitFilter('')
-      setSpellFilter('')
-      if (classHasWeaponsAccess) setStep('weaponTraits')
-      else if (classHasSpellsAccess) setStep('spells')
-      else setStep('sheet')
-    } else if (step === 'weaponTraits') {
-      setSpellFilter('')
-      if (
-        selectedClass &&
-        classEquipmentHasSpells(selectedClass.equipment)
-      ) {
-        setStep('spells')
-      } else {
-        setStep('sheet')
+  const navigateToEditorStep = useCallback(
+    (target: Exclude<Step, 'sheet'>) => {
+      if (target === 'weaponTraits') {
+        if (!selectedClass) {
+          setStep('class')
+          return
+        }
+        if (!classEquipmentHasWeapons(selectedClass.equipment)) {
+          setStep('class')
+          return
+        }
       }
-    } else if (step === 'spells') setStep('sheet')
-  }, [
-    step,
-    canAdvanceName,
-    canAdvanceClassStep,
-    canAdvanceCharacteristicsStep,
-    selectedClass,
-    classHasWeaponsAccess,
-    classHasSpellsAccess,
-  ])
+      if (target === 'spells') {
+        if (!selectedClass) {
+          setStep('class')
+          return
+        }
+        if (!classEquipmentHasSpells(selectedClass.equipment)) {
+          setStep('class')
+          return
+        }
+      }
+      setStep(target)
+    },
+    [selectedClass],
+  )
 
-  const goBack = useCallback(() => {
-    if (step === 'class') setStep('name')
-    else if (step === 'characteristics') setStep('class')
-    else if (step === 'weaponTraits') setStep('characteristics')
-    else if (step === 'spells')
-      setStep(classHasWeaponsAccess ? 'weaponTraits' : 'characteristics')
-    else if (step === 'sheet') {
-      if (
-        selectedClass &&
-        classEquipmentHasSpells(selectedClass.equipment)
-      ) {
-        setStep('spells')
-      } else if (classHasWeaponsAccess) {
-        setStep('weaponTraits')
-      } else {
-        setStep('characteristics')
-      }
-    }
-  }, [step, selectedClass, classHasWeaponsAccess, classHasSpellsAccess])
+  const openSheetCharacterNameEdit = useCallback(() => {
+    setSheetForceEditOpen(false)
+    setEditingForceName(false)
+    setSheetCharNameDraft(draft.name)
+    setSheetCharNameEditOpen(true)
+  }, [draft.name])
 
   const startNewCharacter = useCallback(() => {
     setEditingId(null)
     setDraft(emptyDraft())
-    setStep('name')
+    setStep('sheet')
     setTraitFilter('')
     setWeaponTraitFilter('')
     setSpellFilter('')
     setView('wizard')
   }, [])
 
-  const startEditCharacter = useCallback((c: Character) => {
+  const openCharacterEditor = useCallback((c: Character, target: Step = 'name') => {
     setEditingId(c.id)
     const cls = getClassById(c.classId)
     const tier = cls?.level ?? c.level
@@ -1092,8 +1143,16 @@ function App() {
     setTraitFilter('')
     setWeaponTraitFilter('')
     setSpellFilter('')
-    setStep('name')
     setView('wizard')
+
+    let resolved: Step =
+      target === 'sheet' || target === 'name' ? 'name' : target
+    if (resolved === 'weaponTraits') {
+      if (!cls || !classEquipmentHasWeapons(cls.equipment)) resolved = 'class'
+    } else if (resolved === 'spells') {
+      if (!cls || !classEquipmentHasSpells(cls.equipment)) resolved = 'class'
+    }
+    setStep(resolved)
   }, [])
 
   const goToRoster = useCallback(() => {
@@ -1101,10 +1160,11 @@ function App() {
     setView('roster')
     setEditingId(null)
     setDraft(emptyDraft())
-    setStep('name')
+    setStep('sheet')
     setTraitFilter('')
     setWeaponTraitFilter('')
     setSpellFilter('')
+    setClassChartOpenLevel(null)
   }, [])
 
   const persistCharacter = useCallback(() => {
@@ -1201,7 +1261,7 @@ function App() {
     persistCharacter()
     setEditingId(null)
     setDraft(emptyDraft())
-    setStep('name')
+    setStep('sheet')
     setTraitFilter('')
     setWeaponTraitFilter('')
     setSpellFilter('')
@@ -1245,6 +1305,64 @@ function App() {
           wizardStepTotal) *
         100
 
+  const topbarForceNameControls =
+    editingForceName ? (
+      <div
+        className="topbar__force-edit"
+        role="group"
+        aria-label="Edit team name"
+      >
+        <input
+          ref={topbarForceNameInputRef}
+          id="topbar-force-name"
+          className="topbar__force-input"
+          type="text"
+          autoComplete="off"
+          maxLength={120}
+          placeholder="Team name…"
+          title="Click outside or Enter to save · Esc to undo"
+          value={forceNameDraft}
+          onChange={(e) => setForceNameDraft(e.target.value)}
+          onBlur={(e) => {
+            if (topbarForceBlurSkipRef.current) {
+              topbarForceBlurSkipRef.current = false
+              return
+            }
+            const raw = e.currentTarget.value
+            queueMicrotask(() => {
+              setForceName(normalizeForceName(raw))
+              setEditingForceName(false)
+            })
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.currentTarget as HTMLInputElement).blur()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              topbarForceBlurSkipRef.current = true
+              setForceNameDraft(forceName)
+              setEditingForceName(false)
+            }
+          }}
+        />
+      </div>
+    ) : (
+      <button
+        type="button"
+        className={`topbar__force-trigger${forceName.trim() ? '' : ' topbar__force-trigger--empty'}`}
+        onClick={() => {
+          setSheetForceEditOpen(false)
+          setSheetCharNameEditOpen(false)
+          setForceNameDraft(forceName)
+          setEditingForceName(true)
+        }}
+        title="Edit team name"
+      >
+        {forceName.trim() || FORCE_NAME_EMPTY_LABEL}
+      </button>
+    )
+
   return (
     <div className="app">
       <div className="app__bg" aria-hidden="true">
@@ -1271,74 +1389,20 @@ function App() {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <button
-              type="button"
-              className="btn btn--ghost topbar__roster-btn"
-              onClick={goToRoster}
-            >
-              All characters
-            </button>
-          </>
-        ) : view === 'roster' ? (
-          <div className="topbar__roster-meta" aria-live="polite">
-            {editingForceName ? (
-              <div
-                className="topbar__force-edit"
-                role="group"
-                aria-label="Edit team name"
-              >
-                <input
-                  ref={topbarForceNameInputRef}
-                  id="topbar-force-name"
-                  className="topbar__force-input"
-                  type="text"
-                  autoComplete="off"
-                  maxLength={120}
-                  placeholder="Team name…"
-                  value={forceNameDraft}
-                  onChange={(e) => setForceNameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      setForceName(normalizeForceName(forceNameDraft))
-                      setEditingForceName(false)
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault()
-                      setEditingForceName(false)
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small"
-                  onClick={() => {
-                    setForceName(normalizeForceName(forceNameDraft))
-                    setEditingForceName(false)
-                  }}
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small"
-                  onClick={() => setEditingForceName(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
+            <div className="topbar__cluster" aria-live="polite">
+              {topbarForceNameControls}
               <button
                 type="button"
-                className={`topbar__force-trigger${forceName.trim() ? '' : ' topbar__force-trigger--empty'}`}
-                onClick={() => {
-                  setForceNameDraft(forceName)
-                  setEditingForceName(true)
-                }}
-                title="Edit team name"
+                className="btn btn--ghost topbar__roster-btn"
+                onClick={goToRoster}
               >
-                {forceName.trim() || 'Name your force'}
+                All characters
               </button>
-            )}
+            </div>
+          </>
+        ) : view === 'roster' ? (
+          <div className="topbar__cluster" aria-live="polite">
+            {topbarForceNameControls}
             <span className="topbar__roster-sep" aria-hidden="true">
               ·
             </span>
@@ -1489,7 +1553,9 @@ function App() {
                   <li key={c.id}>
                     <RosterCard
                       character={c}
-                      onEdit={() => startEditCharacter(c)}
+                      onNavigateToEditor={(target) =>
+                        openCharacterEditor(c, target)
+                      }
                       onRemove={() => removeCharacter(c.id)}
                       onToggleReacted={() => toggleRoundState(c.id, 'reacted')}
                       onToggleActivated={() =>
@@ -1538,7 +1604,8 @@ function App() {
             aria-labelledby="step-class"
           >
             <p className="panel__kicker">
-              Step {wizardStepNum} of {wizardStepTotal}
+              {editingId ? 'Edit — ' : ''}Step {wizardStepNum} of{' '}
+              {wizardStepTotal}
             </p>
             <h2 id="step-class" className="panel__title">
               Choose a class
@@ -1625,7 +1692,8 @@ function App() {
         {view === 'wizard' && step === 'characteristics' && (
           <section className="panel panel--traits" aria-labelledby="step-traits">
             <p className="panel__kicker">
-              Step {wizardStepNum} of {wizardStepTotal}
+              {editingId ? 'Edit — ' : ''}Step {wizardStepNum} of{' '}
+              {wizardStepTotal}
             </p>
             <h2 id="step-traits" className="panel__title">
               Choose characteristics
@@ -1671,13 +1739,16 @@ function App() {
           </section>
         )}
 
-        {view === 'wizard' && step === 'weaponTraits' && classHasWeaponsAccess && (
+        {view === 'wizard' &&
+          step === 'weaponTraits' &&
+          classHasWeaponsAccess && (
           <section
             className="panel panel--traits"
             aria-labelledby="step-weapon-traits"
           >
             <p className="panel__kicker">
-              Step {wizardStepNum} of {wizardStepTotal}
+              {editingId ? 'Edit — ' : ''}Step {wizardStepNum} of{' '}
+              {wizardStepTotal}
             </p>
             <h2 id="step-weapon-traits" className="panel__title">
               Choose weapon traits
@@ -1800,7 +1871,8 @@ function App() {
             aria-labelledby="step-spells"
           >
             <p className="panel__kicker">
-              Step {wizardStepNum} of {wizardStepTotal}
+              {editingId ? 'Edit — ' : ''}Step {wizardStepNum} of{' '}
+              {wizardStepTotal}
             </p>
             <h2 id="step-spells" className="panel__title">
               Choose spells
@@ -1841,17 +1913,33 @@ function App() {
           </section>
         )}
 
-        {view === 'wizard' && step === 'sheet' && (
+        {view === 'wizard' && step === 'sheet' && !editingId && (
           <section className="sheet" aria-labelledby="sheet-title">
             <div className="sheet__header">
-              <div>
-                <p className="sheet__label">Character sheet</p>
-                <h2 id="sheet-title" className="sheet__title">
-                  {draft.name.trim() || 'Unnamed'}
-                </h2>
-              </div>
+              {sheetCharNameEditOpen ? (
+                <div className="sheet__header-main">
+                  <p className="sheet__label">Character sheet</p>
+                  <h2 id="sheet-title" className="sheet__title">
+                    {sheetCharNameDraft.trim() || 'Unnamed'}
+                  </h2>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="sheet__title-hit"
+                  onClick={openSheetCharacterNameEdit}
+                >
+                  <p className="sheet__label">Character sheet</p>
+                  <h2 id="sheet-title" className="sheet__title">
+                    {draft.name.trim() || 'Unnamed — tap to name'}
+                  </h2>
+                </button>
+              )}
               <div className="sheet__stamp">Draft</div>
             </div>
+            <p className="sheet__tap-hint">
+              Tap the title, a name, or another section to edit.
+            </p>
 
             <div className="sheet__columns">
               <div className="sheet__col">
@@ -1859,23 +1947,152 @@ function App() {
                 <dl className="sheet__dl">
                   <div>
                     <dt>Name</dt>
-                    <dd>{draft.name.trim() || '—'}</dd>
+                    <dd className="sheet__dd-force">
+                      {sheetCharNameEditOpen ? (
+                        <div
+                          className="sheet__force-inline"
+                          role="group"
+                          aria-label="Edit character name"
+                        >
+                          <input
+                            ref={sheetCharNameInputRef}
+                            className="sheet__force-input"
+                            type="text"
+                            autoComplete="off"
+                            maxLength={120}
+                            placeholder="Character name"
+                            title="Click outside or Enter to save · Esc to undo"
+                            value={sheetCharNameDraft}
+                            onChange={(e) =>
+                              setSheetCharNameDraft(e.target.value)
+                            }
+                            onBlur={(e) => {
+                              if (sheetCharNameBlurSkipRef.current) {
+                                sheetCharNameBlurSkipRef.current = false
+                                return
+                              }
+                              const nextName = e.currentTarget.value.trim()
+                              queueMicrotask(() => {
+                                setDraft((d) => ({ ...d, name: nextName }))
+                                setSheetCharNameEditOpen(false)
+                              })
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                ;(e.currentTarget as HTMLInputElement).blur()
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault()
+                                sheetCharNameBlurSkipRef.current = true
+                                setSheetCharNameDraft(draft.name)
+                                setSheetCharNameEditOpen(false)
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`sheet__tap-value${draft.name.trim() ? '' : ' sheet__tap-value--empty'}`}
+                          onClick={openSheetCharacterNameEdit}
+                        >
+                          {draft.name.trim() || 'Tap to set'}
+                        </button>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt>Force</dt>
-                    <dd>{forceName.trim() || '—'}</dd>
+                    <dd className="sheet__dd-force">
+                      {sheetForceEditOpen ? (
+                        <div
+                          className="sheet__force-inline"
+                          role="group"
+                          aria-label="Edit force name"
+                        >
+                          <input
+                            ref={sheetForceInputRef}
+                            className="sheet__force-input"
+                            type="text"
+                            autoComplete="off"
+                            maxLength={120}
+                            placeholder="Team name…"
+                            title="Click outside or Enter to save · Esc to undo"
+                            value={sheetForceDraft}
+                            onChange={(e) =>
+                              setSheetForceDraft(e.target.value)
+                            }
+                            onBlur={(e) => {
+                              if (sheetForceBlurSkipRef.current) {
+                                sheetForceBlurSkipRef.current = false
+                                return
+                              }
+                              const raw = e.currentTarget.value
+                              queueMicrotask(() => {
+                                setForceName(normalizeForceName(raw))
+                                setSheetForceEditOpen(false)
+                              })
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                ;(e.currentTarget as HTMLInputElement).blur()
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault()
+                                sheetForceBlurSkipRef.current = true
+                                setSheetForceDraft(forceName)
+                                setSheetForceEditOpen(false)
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className={`sheet__tap-value${forceName.trim() ? '' : ' sheet__tap-value--empty'}`}
+                          onClick={() => {
+                            setEditingForceName(false)
+                            setSheetCharNameEditOpen(false)
+                            setSheetForceDraft(forceName)
+                            setSheetForceEditOpen(true)
+                          }}
+                        >
+                          {forceName.trim() || FORCE_NAME_EMPTY_LABEL}
+                        </button>
+                      )}
+                    </dd>
                   </div>
                   <div>
                     <dt>Class</dt>
-                    <dd>{selectedClass?.name ?? '—'}</dd>
+                    <dd>
+                      <button
+                        type="button"
+                        className={`sheet__tap-value${selectedClass ? '' : ' sheet__tap-value--empty'}`}
+                        onClick={() => navigateToEditorStep('class')}
+                      >
+                        {selectedClass?.name ?? 'Tap to choose'}
+                      </button>
+                    </dd>
                   </div>
                   <div>
                     <dt>Level</dt>
-                    <dd>{draft.level}</dd>
+                    <dd>
+                      <button
+                        type="button"
+                        className="sheet__tap-value"
+                        onClick={() => navigateToEditorStep('class')}
+                      >
+                        {draft.level}
+                      </button>
+                    </dd>
                   </div>
                 </dl>
               </div>
-              <div className="sheet__col sheet__col--wide">
+              <button
+                type="button"
+                className="sheet__col sheet__col--wide sheet__combat-hit"
+                onClick={() => navigateToEditorStep('class')}
+              >
                 <h3 className="sheet__section-title">Combat stats</h3>
                 {selectedClass ? (
                   <div className="sheet__stat-grid">
@@ -1917,14 +2134,26 @@ function App() {
                     </div>
                   </div>
                 ) : (
-                  <p className="sheet__muted">Select a class to see stats.</p>
+                  <p className="sheet__muted sheet__muted--in-hit">
+                    Tap to choose a class and see combat stats.
+                  </p>
                 )}
-              </div>
+              </button>
             </div>
 
-            {draft.characteristicIds.length > 0 && (
-              <div className="sheet__traits">
+            <div className="sheet__traits">
+              <button
+                type="button"
+                className="sheet__section-hit"
+                onClick={() => navigateToEditorStep('characteristics')}
+              >
                 <h3 className="sheet__section-title">Your characteristics</h3>
+              </button>
+              {draft.characteristicIds.length === 0 ? (
+                <p className="sheet__muted">
+                  Tap the heading to choose two.
+                </p>
+              ) : (
                 <ol className="sheet__traits-list">
                   {draft.characteristicIds.map((tid) => {
                     const t = getCharacteristicById(tid)
@@ -1940,76 +2169,90 @@ function App() {
                     )
                   })}
                 </ol>
-              </div>
-            )}
+              )}
+            </div>
 
             {selectedClass &&
-              classEquipmentHasWeapons(selectedClass.equipment) &&
-              (draft.weaponType !== null ||
-                draft.weaponTraitIds.length > 0 ||
-                draftWeaponStyleLabel(draft, selectedClass) !== '—') && (
-              <div className="sheet__traits">
-                <h3 className="sheet__section-title">Weapon</h3>
-                <p className="sheet__weapon-type">
-                  <span className="sheet__weapon-type-label">Type — </span>
-                  <span className="sheet__weapon-type-value">
-                    {draft.weaponType
-                      ? formatWeaponType(draft.weaponType)
-                      : '—'}
-                  </span>
-                </p>
-                <p className="sheet__weapon-type">
-                  <span className="sheet__weapon-type-label">Style — </span>
-                  <span className="sheet__weapon-type-value">
-                    {draftWeaponStyleLabel(draft, selectedClass)}
-                  </span>
-                </p>
-                <WeaponCombatStatsBlock
-                  weaponType={draft.weaponType}
-                  equipment={selectedClass.equipment}
-                  weaponStyle={draft.weaponStyle}
-                  className="weapon-combat-stats--sheet"
-                />
-                {draft.weaponTraitIds.length > 0 ? (
-                  <ol className="sheet__traits-list">
-                    {draft.weaponTraitIds.map((tid) => {
-                      const t = getWeaponTraitById(tid)
-                      return (
-                        <li key={tid}>
-                          <strong className="sheet__trait-name">
-                            {t?.name ?? tid}
-                          </strong>
-                          <p className="sheet__muted sheet__trait-body">
-                            {t?.description ?? '—'}
-                          </p>
-                        </li>
-                      )
-                    })}
-                  </ol>
-                ) : null}
-              </div>
-            )}
-
-            {selectedClass &&
-              classEquipmentHasSpells(selectedClass.equipment) &&
-              draft.spellIds.length > 0 && (
+              classEquipmentHasWeapons(selectedClass.equipment) && (
                 <div className="sheet__traits">
-                  <h3 className="sheet__section-title">Spells</h3>
-                  <ol className="sheet__traits-list">
-                    {draft.spellIds.map((sid) => {
-                      const s = getSpellById(sid)
-                      return (
-                        <li key={sid}>
-                          <strong className="sheet__trait-name">
-                            {s?.name ?? sid}
-                          </strong>
-                          <p className="sheet__muted sheet__trait-body sheet__trait-body--pre">
-                            {s?.description ?? '—'}
-                          </p>
-                        </li>
-                      )
-                    })}
-                  </ol>
+                  <button
+                    type="button"
+                    className="sheet__section-hit"
+                    onClick={() => navigateToEditorStep('weaponTraits')}
+                  >
+                    <h3 className="sheet__section-title">Weapon</h3>
+                  </button>
+                  <div className="sheet__weapon-type-row">
+                    <span className="sheet__weapon-type-value">
+                      {draftWeaponStyleLabel(draft, selectedClass)}
+                    </span>
+                    <span className="sheet__weapon-type-value sheet__weapon-type-value--end">
+                      {draft.weaponType
+                        ? formatWeaponType(draft.weaponType)
+                        : '—'}
+                    </span>
+                  </div>
+                  <WeaponCombatStatsBlock
+                    weaponType={draft.weaponType}
+                    equipment={selectedClass.equipment}
+                    weaponStyle={draft.weaponStyle}
+                    className="weapon-combat-stats--sheet"
+                  />
+                  {draft.weaponTraitIds.length === 0 ? (
+                    <p className="sheet__muted">
+                      No traits yet — tap the heading to add weapon options.
+                    </p>
+                  ) : (
+                    <ol className="sheet__traits-list">
+                      {draft.weaponTraitIds.map((tid) => {
+                        const t = getWeaponTraitById(tid)
+                        return (
+                          <li key={tid}>
+                            <strong className="sheet__trait-name">
+                              {t?.name ?? tid}
+                            </strong>
+                            <p className="sheet__muted sheet__trait-body">
+                              {t?.description ?? '—'}
+                            </p>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  )}
+                </div>
+              )}
+
+            {selectedClass &&
+              classEquipmentHasSpells(selectedClass.equipment) && (
+                <div className="sheet__traits">
+                  <button
+                    type="button"
+                    className="sheet__section-hit"
+                    onClick={() => navigateToEditorStep('spells')}
+                  >
+                    <h3 className="sheet__section-title">Spells</h3>
+                  </button>
+                  {draft.spellIds.length === 0 ? (
+                    <p className="sheet__muted">
+                      None yet — tap the heading to choose spells.
+                    </p>
+                  ) : (
+                    <ol className="sheet__traits-list">
+                      {draft.spellIds.map((sid) => {
+                        const s = getSpellById(sid)
+                        return (
+                          <li key={sid}>
+                            <strong className="sheet__trait-name">
+                              {s?.name ?? sid}
+                            </strong>
+                            <p className="sheet__muted sheet__trait-body sheet__trait-body--pre">
+                              {s?.description ?? '—'}
+                            </p>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  )}
                 </div>
               )}
           </section>
@@ -2042,44 +2285,42 @@ function App() {
 
         {view === 'wizard' && step !== 'sheet' && (
           <>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={step === 'name' ? goToRoster : goBack}
-            >
-              Back
-            </button>
-            <div className="actions__spacer" />
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={goNext}
-              disabled={
-                (step === 'name' && !canAdvanceName) ||
-                (step === 'class' && !canAdvanceClassStep) ||
-                (step === 'characteristics' && !canAdvanceCharacteristicsStep) ||
-                (step === 'weaponTraits' &&
-                  classHasWeaponsAccess &&
-                  (draft.weaponType === null ||
-                    (classWeaponProfile.both && draft.weaponStyle === null)))
-              }
-            >
-              {(step === 'characteristics' &&
-                !classHasWeaponsAccess &&
-                !classHasSpellsAccess) ||
-              (step === 'weaponTraits' && !classHasSpellsAccess) ||
-              step === 'spells'
-                ? 'Review'
-                : 'Continue'}
-            </button>
+            {editingId ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={goToRoster}
+                >
+                  Cancel
+                </button>
+                <div className="actions__spacer" />
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={saveAndReturn}
+                  disabled={!canSaveCharacter}
+                >
+                  Save changes
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setStep('sheet')}
+                >
+                  Back to sheet
+                </button>
+                <div className="actions__spacer" />
+              </>
+            )}
           </>
         )}
 
-        {view === 'wizard' && step === 'sheet' && (
+        {view === 'wizard' && step === 'sheet' && !editingId && (
           <>
-            <button type="button" className="btn btn--ghost" onClick={goBack}>
-              Back
-            </button>
             <button
               type="button"
               className="btn btn--ghost"
@@ -2106,14 +2347,14 @@ function App() {
 
 function RosterCard({
   character,
-  onEdit,
+  onNavigateToEditor,
   onRemove,
   onToggleReacted,
   onToggleActivated,
   onHpChange,
 }: {
   character: Character
-  onEdit: () => void
+  onNavigateToEditor: (target: Step) => void
   onRemove: () => void
   onToggleReacted: () => void
   onToggleActivated: () => void
@@ -2136,16 +2377,35 @@ function RosterCard({
     <article
       className={`char-card${sheetMinimized ? ' char-card--minimized' : ''}`}
     >
-      <header className="char-card__head">
-        <h3 className="char-card__name">{character.name}</h3>
+      <div className="char-card__top">
+        <button
+          type="button"
+          className="char-card__name-hit"
+          onClick={() => onNavigateToEditor('name')}
+          aria-label={`Edit name for ${character.name}`}
+        >
+          <h3 className="char-card__name">{character.name}</h3>
+        </button>
+        <button
+          type="button"
+          className="char-card__class char-card__class--hit"
+          onClick={() => onNavigateToEditor('class')}
+          aria-label={`Edit class for ${character.name}`}
+        >
+          {cls?.name ?? character.classId}
+        </button>
         <div className="char-card__head-meta">
           {sheetMinimized ? (
-            <span className="char-card__down-badge">Annihilated</span>
+            <span className="char-card__down-badge">Slain</span>
           ) : null}
+          <ClassIconBadge
+            classId={character.classId}
+            name={cls?.name ?? character.classId}
+            size="roster"
+          />
           <span className="char-card__level">Lv {character.level}</span>
         </div>
-      </header>
-      <p className="char-card__class">{cls?.name ?? character.classId}</p>
+      </div>
 
       <div className="char-card__health">
         <div className="char-card__health-row">
@@ -2186,14 +2446,52 @@ function RosterCard({
       </div>
 
       {!sheetMinimized && (
+        <button
+          type="button"
+          className="char-card__stats char-card__stats--hit"
+          aria-label={`Edit class and combat stats for ${character.name}`}
+          onClick={() => onNavigateToEditor('class')}
+        >
+          {cls ? (
+            <>
+              <span>HP {cls.health}</span>
+              <span>SPD {cls.speed}</span>
+              <span>MEL {cls.melee}</span>
+              <span>RNG {cls.ranged}</span>
+              <span>DEF {cls.defense}</span>
+              <span>WP {cls.willpower}</span>
+            </>
+          ) : (
+            <>
+              <span>HP</span>
+              <span>SPD</span>
+              <span>MEL</span>
+              <span>RNG</span>
+              <span>DEF</span>
+              <span>WP</span>
+            </>
+          )}
+        </button>
+      )}
+
+      {!sheetMinimized && (
         <section
-          className="char-card__characteristics"
+          className="char-card__characteristics char-card__sheet-tap"
           aria-label="Characteristics"
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigateToEditor('characteristics')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onNavigateToEditor('characteristics')
+            }
+          }}
         >
           <h4 className="char-card__section-title">Characteristics</h4>
           {character.characteristicIds.length === 0 ? (
             <p className="char-card__traits char-card__traits--empty">
-              None on file — use <strong>Edit</strong> to choose two.
+              None on file — tap here to choose two.
             </p>
           ) : (
             <ul className="char-card__trait-list">
@@ -2219,22 +2517,27 @@ function RosterCard({
         cls &&
         classEquipmentHasWeapons(cls.equipment) && (
           <section
-            className="char-card__characteristics"
+            className="char-card__characteristics char-card__sheet-tap"
             aria-label="Weapon"
+            role="button"
+            tabIndex={0}
+            onClick={() => onNavigateToEditor('weaponTraits')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigateToEditor('weaponTraits')
+              }
+            }}
           >
             <h4 className="char-card__section-title">Weapon</h4>
             <p className="char-card__weapon-type">
-              <span className="char-card__weapon-type-label">Type</span>
               <span className="char-card__weapon-type-value">
+                {displayWeaponStyle(character)}
+              </span>
+              <span className="char-card__weapon-type-value char-card__weapon-type-value--end">
                 {character.weaponType
                   ? formatWeaponType(character.weaponType)
                   : '—'}
-              </span>
-            </p>
-            <p className="char-card__weapon-type">
-              <span className="char-card__weapon-type-label">Style</span>
-              <span className="char-card__weapon-type-value">
-                {displayWeaponStyle(character)}
               </span>
             </p>
             <WeaponCombatStatsBlock
@@ -2245,7 +2548,7 @@ function RosterCard({
             />
             {character.weaponTraitIds.length === 0 ? (
               <p className="char-card__traits char-card__traits--empty">
-                No traits — use <strong>Edit</strong> to add.
+                No traits — tap here to add.
               </p>
             ) : (
               <ul className="char-card__trait-list">
@@ -2271,13 +2574,22 @@ function RosterCard({
         cls &&
         classEquipmentHasSpells(cls.equipment) && (
           <section
-            className="char-card__characteristics"
+            className="char-card__characteristics char-card__sheet-tap"
             aria-label="Spells"
+            role="button"
+            tabIndex={0}
+            onClick={() => onNavigateToEditor('spells')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigateToEditor('spells')
+              }
+            }}
           >
             <h4 className="char-card__section-title">Spells</h4>
             {character.spellIds.length === 0 ? (
               <p className="char-card__traits char-card__traits--empty">
-                None selected — use <strong>Edit</strong> to add.
+                None selected — tap here to add.
               </p>
             ) : (
               <ul className="char-card__trait-list">
@@ -2317,29 +2629,6 @@ function RosterCard({
           Activated
         </button>
       </div>
-      {!sheetMinimized && (
-        <div className="char-card__stats" aria-hidden="true">
-          {cls ? (
-            <>
-              <span>HP {cls.health}</span>
-              <span>SPD {cls.speed}</span>
-              <span>MEL {cls.melee}</span>
-              <span>RNG {cls.ranged}</span>
-              <span>DEF {cls.defense}</span>
-              <span>WP {cls.willpower}</span>
-            </>
-          ) : (
-            <>
-              <span>HP</span>
-              <span>SPD</span>
-              <span>MEL</span>
-              <span>RNG</span>
-              <span>DEF</span>
-              <span>WP</span>
-            </>
-          )}
-        </div>
-      )}
       <div className="char-card__actions">
         {sheetMinimized ? (
           <button
@@ -2359,9 +2648,6 @@ function RosterCard({
             Minimize
           </button>
         ) : null}
-        <button type="button" className="btn btn--ghost btn--small" onClick={onEdit}>
-          Edit
-        </button>
         <button
           type="button"
           className="btn btn--danger btn--small"
