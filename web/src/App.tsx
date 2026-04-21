@@ -27,7 +27,7 @@ import {
   getWeaponTraitById,
   isWeaponTraitCompatibleWithEquipment,
 } from './weaponTraits'
-import { getWeaponCategoryStats } from './weaponStats'
+import { UNARMED_MELEE_STATS, getWeaponCategoryStats } from './weaponStats'
 import {
   SPELLS,
   classEquipmentHasSpells,
@@ -200,7 +200,8 @@ function WeaponCombatStatsBlock({
   const p = classEquipmentWeaponProfile(equipment)
   const melee = weaponTypeMelee ? getWeaponCategoryStats(weaponTypeMelee) : null
   const ranged = weaponTypeRanged ? getWeaponCategoryStats(weaponTypeRanged) : null
-  if (!melee && !ranged) return null
+  const showUnarmed = p.hasMelee && !melee
+  if (!melee && !ranged && !showUnarmed) return null
   return (
     <div
       className={`weapon-combat-stats${className ? ` ${className}` : ''}`}
@@ -209,6 +210,14 @@ function WeaponCombatStatsBlock({
         <p className="weapon-combat-stats__row">
           <span className="weapon-combat-stats__mono">
             Melee weapon — Attacks {melee.attacks} · Damage {melee.damage}
+          </span>
+        </p>
+      ) : null}
+      {showUnarmed ? (
+        <p className="weapon-combat-stats__row weapon-combat-stats__row--unarmed">
+          <span className="weapon-combat-stats__mono">
+            Unarmed (fallback) — Attacks {UNARMED_MELEE_STATS.attacks} · Damage{' '}
+            {UNARMED_MELEE_STATS.damage}
           </span>
         </p>
       ) : null}
