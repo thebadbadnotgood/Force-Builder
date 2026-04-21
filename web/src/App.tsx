@@ -27,10 +27,7 @@ import {
   getWeaponTraitById,
   isWeaponTraitCompatibleWithEquipment,
 } from './weaponTraits'
-import {
-  UNARMED_MELEE_STATS,
-  getWeaponCategoryStats,
-} from './weaponStats'
+import { getWeaponCategoryStats } from './weaponStats'
 import {
   SPELLS,
   classEquipmentHasSpells,
@@ -47,7 +44,7 @@ import { CombatDisciplinePanel } from './CombatDisciplinePanel'
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
-const STORAGE_VERSION = 12
+const STORAGE_VERSION = 13
 /** Shown when no force name is set — keep in sync across top bar, sheet, and tab title. */
 const FORCE_NAME_EMPTY_LABEL = 'Name your force'
 const DOCUMENT_TITLE_BASE = 'Cyber Savage — Force Builder'
@@ -73,12 +70,6 @@ function formatWeaponType(w: WeaponType): string {
   return w.charAt(0).toUpperCase() + w.slice(1)
 }
 
-type WeaponStyle = 'melee' | 'ranged'
-
-function formatWeaponStyle(s: WeaponStyle): string {
-  return s === 'melee' ? 'Melee' : 'Ranged'
-}
-
 type Character = {
   id: string
   name: string
@@ -89,13 +80,13 @@ type Character = {
   /** Weapon traits compatible with class equipment (see `weaponTraits.ts`). */
   weaponTraitIds: string[]
   /**
-   * Chosen weapon type when the class has a weapon line; otherwise null.
+   * Chosen melee weapon type when the class has a melee weapon line; otherwise null.
    */
-  weaponType: WeaponType | null
+  weaponTypeMelee: WeaponType | null
   /**
-   * Melee vs ranged when the class supports weapons; dual-profile classes require a pick.
+   * Chosen ranged weapon type when the class has a ranged weapon line; otherwise null.
    */
-  weaponStyle: WeaponStyle | null
+  weaponTypeRanged: WeaponType | null
   /** Spells — only for classes whose equipment includes “spell”. */
   spellIds: string[]
   /** Current hit points (0 … class max HP). */
@@ -111,8 +102,8 @@ type WizardDraft = {
   level: number
   characteristicIds: string[]
   weaponTraitIds: string[]
-  weaponType: WeaponType | null
-  weaponStyle: WeaponStyle | null
+  weaponTypeMelee: WeaponType | null
+  weaponTypeRanged: WeaponType | null
   spellIds: string[]
 }
 
@@ -122,23 +113,12 @@ const emptyDraft = (): WizardDraft => ({
   level: CLASS_TIER_MIN,
   characteristicIds: [],
   weaponTraitIds: [],
-  weaponType: null,
-  weaponStyle: null,
+  weaponTypeMelee: null,
+  weaponTypeRanged: null,
   spellIds: [],
 })
 
-/** Effective style for display (stored value or inferred from class equipment). */
-function displayWeaponStyle(character: Character): string {
-  const cls = getClassById(character.classId)
-  if (!cls || !classEquipmentHasWeapons(cls.equipment)) return '—'
-  if (character.weaponStyle === 'melee' || character.weaponStyle === 'ranged') {
-    return formatWeaponStyle(character.weaponStyle)
-  }
-  const { hasMelee, hasRanged } = classEquipmentWeaponProfile(cls.equipment)
-  if (hasMelee && !hasRanged) return formatWeaponStyle('melee')
-  if (hasRanged && !hasMelee) return formatWeaponStyle('ranged')
-  return '—'
-}
+const MAX_PLAYER_WEAPON_TRAITS = 2
 
 function normalizeCharacteristicIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -161,68 +141,81 @@ function normalizeWeaponType(raw: unknown): WeaponType | null {
   return null
 }
 
-function normalizeWeaponStyle(raw: unknown): WeaponStyle | null {
-  if (raw === 'melee' || raw === 'ranged') return raw
-  return null
-}
+function normalizeWeaponTypePair(
+  classId: string,
+  o: Record<string, unknown>,
+): { weaponTypeMelee: WeaponType | null; weaponTypeRanged: WeaponType | null } {
+  const cls = getClassById(classId)
+  const eq = cls?.equipment ?? ''
+  const p = classEquipmentWeaponProfile(eq)
 
-function coerceWeaponStyleForEquipment(
-  equipment: string,
-  current: WeaponStyle | null,
-): WeaponStyle | null {
-  if (!classEquipmentHasWeapons(equipment)) return null
-  const { hasMelee, hasRanged } = classEquipmentWeaponProfile(equipment)
-  if (hasMelee && !hasRanged) return 'melee'
-  if (hasRanged && !hasMelee) return 'ranged'
-  if (hasMelee && hasRanged) {
-    return current === 'melee' || current === 'ranged' ? current : null
+  // v13+: explicit fields
+  const rawMelee = (o as { weaponTypeMelee?: unknown }).weaponTypeMelee
+  const rawRanged = (o as { weaponTypeRanged?: unknown }).weaponTypeRanged
+  const melee = normalizeWeaponType(rawMelee)
+  const ranged = normalizeWeaponType(rawRanged)
+  if (rawMelee !== undefined || rawRanged !== undefined) {
+    return {
+      weaponTypeMelee: p.hasMelee ? melee : null,
+      weaponTypeRanged: p.hasRanged ? ranged : null,
+    }
   }
-  return null
-}
 
-function draftWeaponStyleLabel(draft: WizardDraft, cls: ForceClass | null): string {
-  if (!cls || !classEquipmentHasWeapons(cls.equipment)) return '—'
-  const s = coerceWeaponStyleForEquipment(cls.equipment, draft.weaponStyle)
-  return s ? formatWeaponStyle(s) : '—'
-}
+  // v2–v12 legacy: one weaponType + weaponStyle
+  const legacyType = normalizeWeaponType(
+    (o as { weaponType?: unknown; weaponWeight?: unknown }).weaponType ??
+      (o as { weaponWeight?: unknown }).weaponWeight,
+  )
+  const legacyStyle = (o as { weaponStyle?: unknown }).weaponStyle
+  const legacyStyleNorm =
+    legacyStyle === 'melee' || legacyStyle === 'ranged' ? legacyStyle : null
 
-function weaponCombatStatsUnarmedVisible(
-  equipment: string,
-  weaponStyle: WeaponStyle | null,
-): boolean {
-  return coerceWeaponStyleForEquipment(equipment, weaponStyle) === 'melee'
+  if (!p.hasMelee && !p.hasRanged) {
+    return { weaponTypeMelee: null, weaponTypeRanged: null }
+  }
+  if (p.hasMelee && !p.hasRanged) {
+    return { weaponTypeMelee: legacyType, weaponTypeRanged: null }
+  }
+  if (p.hasRanged && !p.hasMelee) {
+    return { weaponTypeMelee: null, weaponTypeRanged: legacyType }
+  }
+  // both: map based on legacy style when present
+  return {
+    weaponTypeMelee: legacyStyleNorm === 'melee' ? legacyType : null,
+    weaponTypeRanged: legacyStyleNorm === 'ranged' ? legacyType : null,
+  }
 }
 
 function WeaponCombatStatsBlock({
-  weaponType,
+  weaponTypeMelee,
+  weaponTypeRanged,
   equipment,
-  weaponStyle,
   className = '',
 }: {
-  weaponType: WeaponType | null
+  weaponTypeMelee: WeaponType | null
+  weaponTypeRanged: WeaponType | null
   equipment: string
-  weaponStyle: WeaponStyle | null
   className?: string
 }) {
-  const showUnarmed = weaponCombatStatsUnarmedVisible(equipment, weaponStyle)
-  const equipped = weaponType ? getWeaponCategoryStats(weaponType) : null
-  if (!equipped && !showUnarmed) return null
+  const p = classEquipmentWeaponProfile(equipment)
+  const melee = weaponTypeMelee ? getWeaponCategoryStats(weaponTypeMelee) : null
+  const ranged = weaponTypeRanged ? getWeaponCategoryStats(weaponTypeRanged) : null
+  if (!melee && !ranged) return null
   return (
     <div
       className={`weapon-combat-stats${className ? ` ${className}` : ''}`}
     >
-      {equipped ? (
+      {p.hasMelee && melee ? (
         <p className="weapon-combat-stats__row">
           <span className="weapon-combat-stats__mono">
-            Attacks {equipped.attacks} · Damage {equipped.damage}
+            Melee weapon — Attacks {melee.attacks} · Damage {melee.damage}
           </span>
         </p>
       ) : null}
-      {showUnarmed ? (
-        <p className="weapon-combat-stats__row weapon-combat-stats__row--unarmed">
+      {p.hasRanged && ranged ? (
+        <p className="weapon-combat-stats__row">
           <span className="weapon-combat-stats__mono">
-            Unarmed* (melee only) — Attacks {UNARMED_MELEE_STATS.attacks} ·
-            Damage {UNARMED_MELEE_STATS.damage}
+            Ranged weapon — Attacks {ranged.attacks} · Damage {ranged.damage}
           </span>
         </p>
       ) : null}
@@ -288,21 +281,10 @@ function normalizeCharacter(x: unknown): Character | null {
     currentHp = maxHp
   }
   currentHp = Math.max(0, Math.min(maxHp, currentHp))
-  let weaponStyle = normalizeWeaponStyle(
-    (o as { weaponStyle?: unknown }).weaponStyle,
+  const { weaponTypeMelee, weaponTypeRanged } = normalizeWeaponTypePair(
+    o.classId,
+    o,
   )
-  const clsMeta = getClassById(o.classId)
-  if (
-    clsMeta &&
-    weaponStyle === null &&
-    classEquipmentHasWeapons(clsMeta.equipment)
-  ) {
-    const { hasMelee, hasRanged } = classEquipmentWeaponProfile(
-      clsMeta.equipment,
-    )
-    if (hasMelee && !hasRanged) weaponStyle = 'melee'
-    else if (hasRanged && !hasMelee) weaponStyle = 'ranged'
-  }
   return {
     id: o.id,
     name: o.name,
@@ -310,11 +292,8 @@ function normalizeCharacter(x: unknown): Character | null {
     level: o.level,
     characteristicIds: normalizeCharacteristicIds(o.characteristicIds),
     weaponTraitIds: normalizeWeaponTraitIds(o.weaponTraitIds),
-    weaponType: normalizeWeaponType(
-      (o as { weaponType?: unknown; weaponWeight?: unknown }).weaponType ??
-        (o as { weaponWeight?: unknown }).weaponWeight,
-    ),
-    weaponStyle,
+    weaponTypeMelee,
+    weaponTypeRanged,
     spellIds: normalizeSpellIds(o.spellIds),
     currentHp,
     reacted: o.reacted === true,
@@ -374,6 +353,7 @@ function loadPersisted(): PersistedPayload {
       const ver = (parsed as { version: unknown }).version
       if (
         ver === STORAGE_VERSION ||
+        ver === 12 ||
         ver === 11 ||
         ver === 10 ||
         ver === 9 ||
@@ -427,11 +407,8 @@ function loadPersisted(): PersistedPayload {
               activated: false,
               characteristicIds: [],
               weaponTraitIds: [],
-              weaponType: null,
-              weaponStyle: coerceWeaponStyleForEquipment(
-                getClassById(classId)?.equipment ?? '',
-                null,
-              ),
+              weaponTypeMelee: null,
+              weaponTypeRanged: null,
               spellIds: [],
               currentHp: getClassById(classId)?.health ?? 10,
             },
@@ -977,37 +954,28 @@ function App() {
       const spellSame =
         nextSpell.length === d.spellIds.length &&
         nextSpell.every((id, i) => id === d.spellIds[i])
-      const nextWeaponType = hasWeapons ? d.weaponType : null
-      const weaponTypeSame = nextWeaponType === d.weaponType
-      const nextWeaponStyle = coerceWeaponStyleForEquipment(eq, d.weaponStyle)
-      const weaponStyleSame = nextWeaponStyle === d.weaponStyle
-      if (weaponSame && spellSame && weaponTypeSame && weaponStyleSame) return d
+      const p = classEquipmentWeaponProfile(eq)
+      const nextWeaponTypeMelee = p.hasMelee ? d.weaponTypeMelee : null
+      const nextWeaponTypeRanged = p.hasRanged ? d.weaponTypeRanged : null
+      const meleeSame = nextWeaponTypeMelee === d.weaponTypeMelee
+      const rangedSame = nextWeaponTypeRanged === d.weaponTypeRanged
+      if (weaponSame && spellSame && meleeSame && rangedSame) return d
       return {
         ...d,
         weaponTraitIds: nextWeapon,
         spellIds: nextSpell,
-        weaponType: nextWeaponType,
-        weaponStyle: nextWeaponStyle,
+        weaponTypeMelee: nextWeaponTypeMelee,
+        weaponTypeRanged: nextWeaponTypeRanged,
       }
     })
   }, [draft.classId])
 
   useEffect(() => {
-    const cls = draft.classId ? getClassById(draft.classId) : null
-    if (!cls) return
-    const p = classEquipmentWeaponProfile(cls.equipment)
-    if (!p.hasMelee || !p.hasRanged || !draft.weaponStyle) return
-    const narrowEq = draft.weaponStyle === 'melee' ? 'std mel' : 'std rng'
     setDraft((d) => {
-      if (d.classId !== cls.id) return d
-      const next = d.weaponTraitIds.filter((id) => {
-        const t = getWeaponTraitById(id)
-        return t && isWeaponTraitCompatibleWithEquipment(t, narrowEq)
-      })
-      if (next.length === d.weaponTraitIds.length) return d
-      return { ...d, weaponTraitIds: next }
+      if (d.weaponTraitIds.length <= MAX_PLAYER_WEAPON_TRAITS) return d
+      return { ...d, weaponTraitIds: d.weaponTraitIds.slice(0, MAX_PLAYER_WEAPON_TRAITS) }
     })
-  }, [draft.weaponStyle, draft.classId])
+  }, [draft.weaponTraitIds.length])
 
   const canAdvanceName = draft.name.trim().length > 0
   const canAdvanceClassStep =
@@ -1026,9 +994,9 @@ function App() {
     selectedClass !== null &&
     canAdvanceCharacteristicsStep &&
     withinForceBudget &&
-       (!classHasWeaponsAccess ||
-      (draft.weaponType !== null &&
-        (!classWeaponProfile.both || draft.weaponStyle !== null)))
+    (!classHasWeaponsAccess ||
+      (!classWeaponProfile.hasMelee || draft.weaponTypeMelee !== null) &&
+        (!classWeaponProfile.hasRanged || draft.weaponTypeRanged !== null))
 
   const toggleCharacteristic = useCallback((id: string) => {
     setDraft((d) => {
@@ -1052,6 +1020,7 @@ function App() {
       if (cur.includes(id)) {
         return { ...d, weaponTraitIds: cur.filter((x) => x !== id) }
       }
+      if (cur.length >= MAX_PLAYER_WEAPON_TRAITS) return d
       const blocked = trait.mutuallyExclusiveWith ?? []
       const filtered = cur.filter((x) => !blocked.includes(x))
       return { ...d, weaponTraitIds: [...filtered, id] }
@@ -1081,12 +1050,7 @@ function App() {
 
   const filteredWeaponTraits = useMemo(() => {
     if (!classHasWeaponsAccess) return []
-    let eq = selectedClass?.equipment ?? ''
-    if (classWeaponProfile.both && draft.weaponStyle === 'melee') {
-      eq = 'std mel'
-    } else if (classWeaponProfile.both && draft.weaponStyle === 'ranged') {
-      eq = 'std rng'
-    }
+    const eq = selectedClass?.equipment ?? ''
     const base = WEAPON_TRAITS.filter((t) =>
       isWeaponTraitCompatibleWithEquipment(t, eq),
     )
@@ -1100,8 +1064,6 @@ function App() {
   }, [
     classHasWeaponsAccess,
     selectedClass?.equipment,
-    classWeaponProfile.both,
-    draft.weaponStyle,
     weaponTraitFilter,
   ])
 
@@ -1177,8 +1139,8 @@ function App() {
         MAX_PLAYER_CHARACTERISTICS,
       ),
       weaponTraitIds: [...c.weaponTraitIds],
-      weaponType: c.weaponType,
-      weaponStyle: c.weaponStyle,
+      weaponTypeMelee: c.weaponTypeMelee,
+      weaponTypeRanged: c.weaponTypeRanged,
       spellIds: [...c.spellIds],
     })
     setTraitFilter('')
@@ -1245,18 +1207,15 @@ function App() {
               )
             })
           : [],
-        weaponType: classEquipmentHasWeapons(
+        weaponTypeMelee: classEquipmentWeaponProfile(
           getClassById(classId)?.equipment ?? '',
-        )
-          ? draft.weaponType
+        ).hasMelee
+          ? draft.weaponTypeMelee
           : null,
-        weaponStyle: classEquipmentHasWeapons(
+        weaponTypeRanged: classEquipmentWeaponProfile(
           getClassById(classId)?.equipment ?? '',
-        )
-          ? coerceWeaponStyleForEquipment(
-              getClassById(classId)?.equipment ?? '',
-              draft.weaponStyle,
-            )
+        ).hasRanged
+          ? draft.weaponTypeRanged
           : null,
         spellIds:
           classEquipmentHasSpells(getClassById(classId)?.equipment ?? '')
@@ -1412,14 +1371,27 @@ function App() {
       </div>
 
       <header className="topbar">
-        <div className="topbar__brand">
-          <img
-            className="topbar__logo"
-            src={`${import.meta.env.BASE_URL}cs-logo.png`}
-            alt="Cyber Savage"
-          />
-          <div>
-            <h1 className="topbar__title">Force Builder</h1>
+        <div className="topbar__left">
+          {view === 'wizard' && step !== 'sheet' && !editingId ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--small topbar__back"
+              onClick={() => setStep('sheet')}
+              aria-label="Back to sheet"
+              title="Back to sheet"
+            >
+              ←
+            </button>
+          ) : null}
+          <div className="topbar__brand">
+            <img
+              className="topbar__logo"
+              src={`${import.meta.env.BASE_URL}cs-logo.png`}
+              alt="Cyber Savage"
+            />
+            <div>
+              <h1 className="topbar__title">Force Builder</h1>
+            </div>
           </div>
         </div>
         {view === 'wizard' ? (
@@ -1870,61 +1842,63 @@ function App() {
             <h2 id="step-weapon-traits" className="panel__title">
               Choose weapon traits
             </h2>
-            <div
-              className="weapon-type-picker"
-              role="radiogroup"
-              aria-labelledby="weapon-type-label"
-            >
-              <p id="weapon-type-label" className="field__label">
-                Weapon type
-              </p>
-              <div className="weapon-type-picker__buttons">
-                {(['light', 'medium', 'heavy'] as const).map((w) => (
-                  <button
-                    key={w}
-                    type="button"
-                    role="radio"
-                    aria-checked={draft.weaponType === w}
-                    className={`weapon-type-picker__btn${
-                      draft.weaponType === w
-                        ? ' weapon-type-picker__btn--selected'
-                        : ''
-                    }`}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, weaponType: w }))
-                    }
-                  >
-                    {formatWeaponType(w)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {classWeaponProfile.both ? (
+            {classWeaponProfile.hasRanged ? (
               <div
                 className="weapon-type-picker"
                 role="radiogroup"
-                aria-labelledby="weapon-style-label"
+                aria-labelledby="weapon-type-ranged-label"
               >
-                <p id="weapon-style-label" className="field__label">
-                  Melee or ranged
+                <p id="weapon-type-ranged-label" className="field__label">
+                  Ranged weapon type
                 </p>
                 <div className="weapon-type-picker__buttons">
-                  {(['melee', 'ranged'] as const).map((s) => (
+                  {(['light', 'medium', 'heavy'] as const).map((w) => (
                     <button
-                      key={s}
+                      key={w}
                       type="button"
                       role="radio"
-                      aria-checked={draft.weaponStyle === s}
+                      aria-checked={draft.weaponTypeRanged === w}
                       className={`weapon-type-picker__btn${
-                        draft.weaponStyle === s
+                        draft.weaponTypeRanged === w
                           ? ' weapon-type-picker__btn--selected'
                           : ''
                       }`}
                       onClick={() =>
-                        setDraft((d) => ({ ...d, weaponStyle: s }))
+                        setDraft((d) => ({ ...d, weaponTypeRanged: w }))
                       }
                     >
-                      {formatWeaponStyle(s)}
+                      {formatWeaponType(w)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {classWeaponProfile.hasMelee ? (
+              <div
+                className="weapon-type-picker"
+                role="radiogroup"
+                aria-labelledby="weapon-type-melee-label"
+              >
+                <p id="weapon-type-melee-label" className="field__label">
+                  Melee weapon type
+                </p>
+                <div className="weapon-type-picker__buttons">
+                  {(['light', 'medium', 'heavy'] as const).map((w) => (
+                    <button
+                      key={w}
+                      type="button"
+                      role="radio"
+                      aria-checked={draft.weaponTypeMelee === w}
+                      className={`weapon-type-picker__btn${
+                        draft.weaponTypeMelee === w
+                          ? ' weapon-type-picker__btn--selected'
+                          : ''
+                      }`}
+                      onClick={() =>
+                        setDraft((d) => ({ ...d, weaponTypeMelee: w }))
+                      }
+                    >
+                      {formatWeaponType(w)}
                     </button>
                   ))}
                 </div>
@@ -1932,14 +1906,14 @@ function App() {
             ) : null}
             {selectedClass ? (
               <WeaponCombatStatsBlock
-                weaponType={draft.weaponType}
+                weaponTypeMelee={draft.weaponTypeMelee}
+                weaponTypeRanged={draft.weaponTypeRanged}
                 equipment={selectedClass.equipment}
-                weaponStyle={draft.weaponStyle}
               />
             ) : null}
             <p className="trait-counter" aria-live="polite">
-              Selected {draft.weaponTraitIds.length}
-              {draft.weaponTraitIds.length === 1 ? ' trait' : ' traits'}
+              Selected {draft.weaponTraitIds.length} / {MAX_PLAYER_WEAPON_TRAITS}{' '}
+              {draft.weaponTraitIds.length === 1 ? 'trait' : 'traits'}
             </p>
             <label className="field">
               <span className="field__label">Filter</span>
@@ -1958,18 +1932,23 @@ function App() {
                 const blockedByMutual = (c.mutuallyExclusiveWith ?? []).some(
                   (bid) => draft.weaponTraitIds.includes(bid),
                 )
+                const atCap =
+                  !selected &&
+                  draft.weaponTraitIds.length >= MAX_PLAYER_WEAPON_TRAITS
                 return (
                   <li key={c.id}>
                     <button
                       type="button"
                       className={`trait-option${selected ? ' trait-option--selected' : ''}`}
                       onClick={() => toggleWeaponTrait(c.id)}
-                      disabled={!selected && blockedByMutual}
+                      disabled={!selected && (blockedByMutual || atCap)}
                       aria-pressed={selected}
                       title={
-                        blockedByMutual && !selected
+                        !selected && blockedByMutual
                           ? 'Incompatible with a trait you already selected.'
-                          : undefined
+                          : !selected && atCap
+                            ? `Limit reached — max ${MAX_PLAYER_WEAPON_TRAITS} weapon traits.`
+                            : undefined
                       }
                     >
                       <span className="trait-option__name">{c.name}</span>
@@ -2301,18 +2280,28 @@ function App() {
                   </button>
                   <div className="sheet__weapon-type-row">
                     <span className="sheet__weapon-type-value">
-                      {draftWeaponStyleLabel(draft, selectedClass)}
+                      {classEquipmentWeaponProfile(selectedClass.equipment).hasMelee
+                        ? `Melee: ${
+                            draft.weaponTypeMelee
+                              ? formatWeaponType(draft.weaponTypeMelee)
+                              : '—'
+                          }`
+                        : 'Melee: —'}
                     </span>
                     <span className="sheet__weapon-type-value sheet__weapon-type-value--end">
-                      {draft.weaponType
-                        ? formatWeaponType(draft.weaponType)
-                        : '—'}
+                      {classEquipmentWeaponProfile(selectedClass.equipment).hasRanged
+                        ? `Ranged: ${
+                            draft.weaponTypeRanged
+                              ? formatWeaponType(draft.weaponTypeRanged)
+                              : '—'
+                          }`
+                        : 'Ranged: —'}
                     </span>
                   </div>
                   <WeaponCombatStatsBlock
-                    weaponType={draft.weaponType}
+                    weaponTypeMelee={draft.weaponTypeMelee}
+                    weaponTypeRanged={draft.weaponTypeRanged}
                     equipment={selectedClass.equipment}
-                    weaponStyle={draft.weaponStyle}
                     className="weapon-combat-stats--sheet"
                   />
                   {draft.weaponTraitIds.length === 0 ? (
@@ -2423,13 +2412,6 @@ function App() {
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => setStep('sheet')}
-                >
-                  Back to sheet
-                </button>
                 <div className="actions__spacer" />
               </>
             )}
@@ -2486,7 +2468,8 @@ function RosterCard({
   const cls = getClassById(character.classId)
   const maxHp = cls?.health ?? Math.max(1, character.currentHp)
   const hpPct = maxHp > 0 ? (character.currentHp / maxHp) * 100 : 0
-  const lowHp = hpPct > 0 && hpPct <= 35
+  const dangerHp = hpPct > 0 && hpPct <= 25
+  const lowHp = hpPct > 0 && hpPct <= 50
   const critHp = character.currentHp <= 0
   const sheetMinimized = critHp && !expandedWhileDown
 
@@ -2533,7 +2516,15 @@ function RosterCard({
         </div>
         <div className="char-card__health-track" aria-hidden="true">
           <div
-            className={`char-card__health-fill${critHp ? ' char-card__health-fill--empty' : lowHp ? ' char-card__health-fill--low' : ''}`}
+            className={`char-card__health-fill${
+              critHp
+                ? ' char-card__health-fill--empty'
+                : dangerHp
+                  ? ' char-card__health-fill--danger'
+                  : lowHp
+                    ? ' char-card__health-fill--low'
+                    : ''
+            }`}
             style={{ width: `${Math.min(100, Math.max(0, hpPct))}%` }}
           />
         </div>
@@ -2649,18 +2640,28 @@ function RosterCard({
             <h4 className="char-card__section-title">Weapon</h4>
             <p className="char-card__weapon-type">
               <span className="char-card__weapon-type-value">
-                {displayWeaponStyle(character)}
+                {classEquipmentWeaponProfile(cls.equipment).hasMelee
+                  ? `Melee: ${
+                      character.weaponTypeMelee
+                        ? formatWeaponType(character.weaponTypeMelee)
+                        : '—'
+                    }`
+                  : 'Melee: —'}
               </span>
               <span className="char-card__weapon-type-value char-card__weapon-type-value--end">
-                {character.weaponType
-                  ? formatWeaponType(character.weaponType)
-                  : '—'}
+                {classEquipmentWeaponProfile(cls.equipment).hasRanged
+                  ? `Ranged: ${
+                      character.weaponTypeRanged
+                        ? formatWeaponType(character.weaponTypeRanged)
+                        : '—'
+                    }`
+                  : 'Ranged: —'}
               </span>
             </p>
             <WeaponCombatStatsBlock
-              weaponType={character.weaponType}
+              weaponTypeMelee={character.weaponTypeMelee}
+              weaponTypeRanged={character.weaponTypeRanged}
               equipment={cls.equipment}
-              weaponStyle={character.weaponStyle}
               className="weapon-combat-stats--card"
             />
             {character.weaponTraitIds.length === 0 ? (

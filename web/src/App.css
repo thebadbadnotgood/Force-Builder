@@ -69,6 +69,13 @@
   text-align: left;
 }
 
+.topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 /* Solid black in the file blends into the topbar via screen so it doesn’t
    read as a flat box. Avoid drop-shadow — it traces the whole PNG bounds. */
 .topbar__logo {
@@ -115,6 +122,12 @@
 .topbar__roster-btn {
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+.topbar__back {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.25rem 0.6rem;
 }
 
 /* Right-side top bar: same layout and type on roster and character editor. */
@@ -907,6 +920,11 @@ button.char-card__class--hit:focus-visible {
 .char-card__health-fill--low {
   background: linear-gradient(90deg, #b8860b, #ffd54a);
   box-shadow: 0 0 10px rgba(255, 213, 74, 0.35);
+}
+
+.char-card__health-fill--danger {
+  background: linear-gradient(90deg, #8b1d1d, #ff4d4d);
+  box-shadow: 0 0 10px rgba(255, 77, 77, 0.35);
 }
 
 .char-card__health-fill--empty {

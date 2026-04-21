@@ -259,6 +259,7 @@ const CLASS_ICON_URLS: Partial<Record<string, string>> = {
     .href,
   warrior: new URL('./assets/class-icons/MELEE 2 WARRIOR.png', import.meta.url)
     .href,
+  mage: new URL('./assets/class-icons/lvl2_mage.png', import.meta.url).href,
   veteran: new URL('./assets/class-icons/RANGED 3 VETERAN.png', import.meta.url)
     .href,
   vanguard: new URL('./assets/class-icons/MELEE 3 VANGUARD.png', import.meta.url)
@@ -267,12 +268,15 @@ const CLASS_ICON_URLS: Partial<Record<string, string>> = {
     .href,
   champion: new URL('./assets/class-icons/MELEE 4 CHAMPION.png', import.meta.url)
     .href,
+  magus: new URL('./assets/class-icons/lvl3_mage.png', import.meta.url).href,
+  archmage: new URL('./assets/class-icons/lvl4_mage.png', import.meta.url).href,
   eliminator: new URL(
     './assets/class-icons/RANGED 5 ELIMINATOR.png',
     import.meta.url,
   ).href,
   destroyer: new URL('./assets/class-icons/MELEE 5 DESTROYER.png', import.meta.url)
     .href,
+  hypermage: new URL('./assets/class-icons/lvl5_mage.png', import.meta.url).href,
 }
 
 export function getClassIconUrl(classId: string): string | undefined {
