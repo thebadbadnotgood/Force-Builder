@@ -36,10 +36,18 @@ import {
   classEquipmentHasSpells,
   getSpellById,
 } from './spells'
+import {
+  COMBAT_DISCIPLINE_IDS,
+  COMBAT_DISCIPLINES,
+  getCombatDiscipline,
+  getCombatDisciplineIconUrl,
+  isCombatDisciplineId,
+} from './combatDisciplines'
+import { CombatDisciplinePanel } from './CombatDisciplinePanel'
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
-const STORAGE_VERSION = 11
+const STORAGE_VERSION = 12
 /** Shown when no force name is set — keep in sync across top bar, sheet, and tab title. */
 const FORCE_NAME_EMPTY_LABEL = 'Name your force'
 const DOCUMENT_TITLE_BASE = 'Cyber Savage — Force Builder'
@@ -319,12 +327,22 @@ function parseForceHubActive(parsed: unknown): boolean {
   return (parsed as { forceHubActive?: unknown }).forceHubActive === true
 }
 
+function parsePersistedCombatDisciplineId(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== 'object') return null
+  if (!('combatDisciplineId' in parsed)) return null
+  const raw = (parsed as { combatDisciplineId: unknown }).combatDisciplineId
+  if (raw === null || raw === '') return null
+  if (typeof raw === 'string' && isCombatDisciplineId(raw)) return raw
+  return null
+}
+
 function loadPersisted(): PersistedPayload {
   const empty = (): PersistedPayload => ({
     characters: [],
     forcePointBudget: DEFAULT_FORCE_POINT_BUDGET,
     forceName: '',
     forceHubActive: false,
+    combatDisciplineId: null,
   })
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -356,6 +374,7 @@ function loadPersisted(): PersistedPayload {
       const ver = (parsed as { version: unknown }).version
       if (
         ver === STORAGE_VERSION ||
+        ver === 11 ||
         ver === 10 ||
         ver === 9 ||
         ver === 8 ||
@@ -370,7 +389,14 @@ function loadPersisted(): PersistedPayload {
           .map(normalizeCharacter)
           .filter((c): c is Character => c !== null)
         const forceHubActive = parseForceHubActive(parsed)
-        return { characters, forcePointBudget, forceName, forceHubActive }
+        const combatDisciplineId = parsePersistedCombatDisciplineId(parsed)
+        return {
+          characters,
+          forcePointBudget,
+          forceName,
+          forceHubActive,
+          combatDisciplineId,
+        }
       }
     }
 
@@ -413,6 +439,7 @@ function loadPersisted(): PersistedPayload {
           forcePointBudget,
           forceName: '',
           forceHubActive: false,
+          combatDisciplineId: null,
         }
       }
     }
@@ -455,6 +482,8 @@ type PersistedPayload = {
    * an empty new force on the roster after refresh until they clear storage.
    */
   forceHubActive: boolean
+  /** One combat discipline for the whole force; null if not chosen. */
+  combatDisciplineId: string | null
 }
 
 type AppView = 'roster' | 'wizard'
@@ -468,6 +497,7 @@ function savePersisted(payload: PersistedPayload) {
       forcePointBudget: payload.forcePointBudget,
       forceName: normalizeForceName(payload.forceName),
       forceHubActive: payload.forceHubActive,
+      combatDisciplineId: payload.combatDisciplineId,
     }),
   )
 }
@@ -689,6 +719,11 @@ function App() {
       bootstrap.p.characters.length > 0 ||
       !!normalizeForceName(bootstrap.p.forceName),
   )
+  const [combatDisciplineId, setCombatDisciplineId] = useState<string | null>(
+    () => bootstrap.p.combatDisciplineId ?? null,
+  )
+  const [combatDisciplineRulesOpen, setCombatDisciplineRulesOpen] =
+    useState(false)
   const [editingForceName, setEditingForceName] = useState(false)
   const [forceNameDraft, setForceNameDraft] = useState('')
   const [sheetForceEditOpen, setSheetForceEditOpen] = useState(false)
@@ -720,8 +755,9 @@ function App() {
       forcePointBudget,
       forceName,
       forceHubActive,
+      combatDisciplineId,
     })
-  }, [characters, forcePointBudget, forceName, forceHubActive])
+  }, [characters, forcePointBudget, forceName, forceHubActive, combatDisciplineId])
 
   useEffect(() => {
     if (!editingForceName) return
@@ -866,6 +902,11 @@ function App() {
     [characters],
   )
   const rosterPointsRemaining = forcePointBudget - rosterPointsUsed
+
+  const selectedCombatDisciplineId =
+    combatDisciplineId && isCombatDisciplineId(combatDisciplineId)
+      ? combatDisciplineId
+      : null
 
   const projectedWizardPoints = useMemo(
     () => projectedForcePoints(characters, editingId, draft),
@@ -1426,10 +1467,11 @@ function App() {
       >
         {view === 'roster' && (
           <div className="roster">
-            <section
-              className={`force-budget${rosterPointsRemaining < 0 ? ' force-budget--over' : ''}`}
-              aria-labelledby="force-budget-title"
-            >
+            <div className="roster__top-split">
+              <section
+                className={`force-budget${rosterPointsRemaining < 0 ? ' force-budget--over' : ''}`}
+                aria-labelledby="force-budget-title"
+              >
               <div className="force-budget__head">
                 <h2 id="force-budget-title" className="force-budget__title">
                   Force points
@@ -1506,6 +1548,81 @@ function App() {
                 </p>
               )}
             </section>
+
+            <section
+              className={`combat-discipline${selectedCombatDisciplineId ? ' combat-discipline--has-icon' : ''}`}
+              aria-labelledby="combat-discipline-title"
+            >
+              {selectedCombatDisciplineId ? (
+                <img
+                  className="combat-discipline__corner-icon"
+                  src={getCombatDisciplineIconUrl(selectedCombatDisciplineId)}
+                  alt=""
+                  decoding="async"
+                />
+              ) : null}
+              <div className="combat-discipline__body">
+                <div className="combat-discipline__head">
+                  <h2
+                    id="combat-discipline-title"
+                    className="combat-discipline__title"
+                  >
+                    Combat discipline
+                  </h2>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small combat-discipline__rules-toggle"
+                    aria-expanded={combatDisciplineRulesOpen}
+                    aria-controls="combat-discipline-rules"
+                    onClick={() =>
+                      setCombatDisciplineRulesOpen((open) => !open)
+                    }
+                  >
+                    <span
+                      className={`combat-discipline__chevron${combatDisciplineRulesOpen ? ' combat-discipline__chevron--open' : ''}`}
+                      aria-hidden="true"
+                    />
+                    {combatDisciplineRulesOpen ? 'Hide rules' : 'Show rules'}
+                  </button>
+                </div>
+                <p className="combat-discipline__lead">
+                  {selectedCombatDisciplineId
+                    ? COMBAT_DISCIPLINES[selectedCombatDisciplineId].flavorText
+                    : 'Pick one discipline for this entire force. It applies to every character on the roster.'}
+                </p>
+                <label className="field combat-discipline__field">
+                  <span className="field__label">Discipline</span>
+                  <select
+                    id="combat-discipline-select"
+                    className="field__input field__select combat-discipline__select"
+                    value={combatDisciplineId ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setCombatDisciplineId(v === '' ? null : v)
+                    }}
+                  >
+                    <option value="">—</option>
+                    {COMBAT_DISCIPLINE_IDS.map((id) => (
+                      <option key={id} value={id}>
+                        {COMBAT_DISCIPLINES[id].title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div
+                  id="combat-discipline-rules"
+                  role="region"
+                  aria-labelledby="combat-discipline-title"
+                  hidden={!combatDisciplineRulesOpen}
+                  className="combat-discipline__detail"
+                >
+                  <CombatDisciplinePanel
+                    doc={getCombatDiscipline(combatDisciplineId)}
+                  />
+                </div>
+              </div>
+            </section>
+            </div>
 
             <div className="roster__head">
               <div>

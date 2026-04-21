@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "make-favicon": "node scripts/make-favicon.mjs"
+    "make-favicon": "node scripts/make-favicon.mjs",
+    "convert-combat-icons": "node scripts/convert-combat-discipline-icons.mjs"
   },
   "dependencies": {
     "react": "^19.2.4",

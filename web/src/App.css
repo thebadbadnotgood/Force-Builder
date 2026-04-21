@@ -230,8 +230,26 @@
   text-align: left;
 }
 
-.force-budget {
+.roster__top-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
   margin-bottom: 1.5rem;
+}
+
+.roster__top-split > * {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .roster__top-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.force-budget {
+  margin-bottom: 0;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--cs-border);
   border-radius: 2px;
@@ -424,6 +442,178 @@
   .force-budget__slider-row {
     justify-content: flex-start;
   }
+}
+
+.combat-discipline {
+  --combat-discipline-icon: 6.75rem;
+  position: relative;
+  margin-bottom: 0;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--cs-border);
+  border-radius: 2px;
+  background: var(--cs-panel);
+}
+
+.combat-discipline__corner-icon {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.75rem;
+  width: var(--combat-discipline-icon);
+  height: var(--combat-discipline-icon);
+  object-fit: contain;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 6px;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.45));
+}
+
+.combat-discipline--has-icon .combat-discipline__body {
+  padding-left: calc(var(--combat-discipline-icon) + 0.9rem);
+}
+
+@media (max-width: 520px) {
+  .combat-discipline {
+    --combat-discipline-icon: 5.25rem;
+  }
+}
+
+.combat-discipline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.combat-discipline__rules-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.combat-discipline__chevron {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--cs-green-dim);
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.combat-discipline__chevron--open {
+  transform: rotate(0deg);
+}
+
+.combat-discipline__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cs-green);
+}
+
+.combat-discipline__lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--cs-muted);
+}
+
+.combat-discipline__field {
+  margin-bottom: 0.75rem;
+}
+
+.combat-discipline__select {
+  width: 100%;
+}
+
+.combat-discipline__detail {
+  max-height: min(70vh, 36rem);
+  overflow-y: auto;
+  padding: 0.5rem 0.35rem 0.15rem 0;
+  margin-right: -0.25rem;
+  border-top: 1px solid var(--cs-border);
+}
+
+.discipline-panel__empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--cs-muted);
+}
+
+.discipline-panel {
+  padding-top: 0.35rem;
+}
+
+.discipline-block__h {
+  margin: 0.85rem 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cs-green-dim);
+}
+
+.discipline-block__h:first-child {
+  margin-top: 0;
+}
+
+.discipline-block__p {
+  margin: 0 0 0.65rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--cs-muted);
+  white-space: pre-line;
+}
+
+.discipline-table-wrap {
+  overflow-x: auto;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.discipline-table {
+  width: 100%;
+  min-width: 16rem;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.discipline-table th {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--cs-border);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+}
+
+.discipline-table td {
+  vertical-align: top;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--cs-text);
+}
+
+.discipline-table__name {
+  font-weight: 600;
+  max-width: 10rem;
+}
+
+.discipline-table__effect {
+  color: var(--cs-muted);
+}
+
+.discipline-table__cost {
+  font-family: var(--cs-mono);
+  white-space: nowrap;
+  color: var(--cs-green-dim);
 }
 
 .roster__head {
@@ -1305,6 +1495,12 @@ button.char-card__stats--hit:focus-visible {
   background-repeat: no-repeat;
   background-position: right 0.85rem center;
   background-size: 0.875rem;
+}
+
+/* Narrow column: give the custom chevron more inset from the border. */
+.field__select.combat-discipline__select {
+  padding-inline-end: 3rem;
+  background-position: right 1rem center;
 }
 
 .class-chart-stack {
