@@ -2,9 +2,7 @@ export type WeaponTraitDef = {
   id: string
   name: string
   description: string
-  /** If set, overrides inference from `description` for equipment filtering. */
   requireWeapon?: 'melee' | 'ranged'
-  /** Remove these trait ids from the selection when this trait is selected. */
   mutuallyExclusiveWith?: string[]
 }
 
@@ -34,7 +32,6 @@ function def(
   }
 }
 
-/** Class `equipment` text uses `rng` / `mel` tokens (see `classes.ts`). */
 export function classEquipmentWeaponProfile(equipment: string): {
   hasRanged: boolean
   hasMelee: boolean
@@ -46,7 +43,6 @@ export function classEquipmentWeaponProfile(equipment: string): {
   }
 }
 
-/** True when the class can take weapon traits (equipment lists a weapon line). */
 export function classEquipmentHasWeapons(equipment: string): boolean {
   const { hasRanged, hasMelee } = classEquipmentWeaponProfile(equipment)
   return hasRanged || hasMelee
@@ -60,7 +56,6 @@ function descriptionImpliesMeleeOnly(description: string): boolean {
   ) {
     return true
   }
-  // Indiscriminate: melee combat action only (no ranged-only tag in PDF line).
   return /^After performing a melee combat action/i.test(description.trim())
 }
 
@@ -70,7 +65,6 @@ function descriptionImpliesRangedOnly(description: string): boolean {
   )
 }
 
-/** Hide trait in the picker when class equipment cannot satisfy melee/ranged-only rules. */
 export function isWeaponTraitCompatibleWithEquipment(
   trait: WeaponTraitDef,
   equipment: string,

@@ -1,11 +1,6 @@
-/**
- * Spell reference from Cyber Savage spell tables.
- * Shown only when class `equipment` includes “spell” (see `classEquipmentHasSpells`).
- */
 export type SpellDef = {
   id: string
   name: string
-  /** Full rule summary (spellocity, range, outcomes). */
   description: string
 }
 

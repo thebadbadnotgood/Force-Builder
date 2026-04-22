@@ -1,7 +1,3 @@
-/**
- * Converts source TIFFs from repo `combat diciplines/` into PNGs under
- * `public/combat-disciplines/` for web use (browser-friendly names).
- */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

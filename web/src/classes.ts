@@ -1,11 +1,6 @@
-/**
- * Class / stat data from `Cyber Savage - Sheet1.csv` (project root).
- * Update this file when the sheet changes.
- */
 export type ForceClass = {
   id: string
   name: string
-  /** Tier from sheet (1–5). */
   level: number
   speed: number
   health: number
@@ -13,10 +8,8 @@ export type ForceClass = {
   ranged: string
   defense: string
   willpower: string
-  /** Number of characteristic picks (sheet column). */
   characteristics: number
   equipment: string
-  /** Short summary for selection cards. */
   tagline: string
 }
 
