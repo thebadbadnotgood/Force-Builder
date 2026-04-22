@@ -232,7 +232,6 @@ function slug(name: string): string {
 }
 
 const rowLevels = rows.map((r) => r.level)
-/** Min / max class tier on the sheet (level slider range in the builder). */
 export const CLASS_TIER_MIN = Math.min(...rowLevels)
 export const CLASS_TIER_MAX = Math.max(...rowLevels)
 
@@ -245,7 +244,6 @@ export function getClassById(id: string): ForceClass | undefined {
   return GAME_CLASSES.find((c) => c.id === id)
 }
 
-/** PNGs in `src/assets/class-icons/` — Vite emits hashed `/assets/…` URLs so icons work with any `base` (e.g. GitHub Pages). */
 const CLASS_ICON_URLS: Partial<Record<string, string>> = {
   grunt: new URL('./assets/class-icons/GRUNT.png', import.meta.url).href,
   trooper: new URL('./assets/class-icons/RANGED 2 TROOPER.png', import.meta.url)
