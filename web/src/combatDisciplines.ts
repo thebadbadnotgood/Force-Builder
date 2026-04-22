@@ -1,8 +1,3 @@
-/**
- * Force-wide combat discipline reference (one per force).
- * Content from Cyber Savage rules reference.
- */
-
 export const COMBAT_DISCIPLINE_IDS = [
   'tactical',
   'barbaric',
@@ -33,14 +28,12 @@ export type DisciplineBlock =
       type: 'table'
       showCost: boolean
       rows: DisciplineTableRow[]
-      /** When set, replaces the default “Name” / “Effect” column headers. */
       columnHeaders?: readonly [string, string]
     }
 
 export type CombatDisciplineDoc = {
   id: CombatDisciplineId
   title: string
-  /** Thematic blurb on the roster when this discipline is selected. */
   flavorText: string
   blocks: DisciplineBlock[]
 }
@@ -649,7 +642,6 @@ export function getCombatDiscipline(
   return COMBAT_DISCIPLINES[id]
 }
 
-/** Public PNG path (see `public/combat-disciplines/`; run `convert-combat-discipline-icons` after updating source TIFFs). */
 export function getCombatDisciplineIconUrl(id: CombatDisciplineId): string {
   return `${import.meta.env.BASE_URL}combat-disciplines/${id}.png`
 }

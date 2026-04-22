@@ -1,8 +1,3 @@
-/**
- * Build square transparent favicons from repo-root cs-logo.png (letterboxed, not stretched).
- * Removes near-white background pixels, then trims and fits into a square.
- * Run: npm run make-favicon
- */
 import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 import path from 'path'
@@ -12,7 +7,6 @@ const webRoot = path.join(__dirname, '..')
 const logoPath = path.join(webRoot, '..', 'cs-logo.png')
 const publicDir = path.join(webRoot, 'public')
 
-/** Turn light/white backdrop transparent so the tab icon isn’t a white box. */
 async function logoTransparentSharp() {
   const { data, info } = await sharp(logoPath)
     .ensureAlpha()

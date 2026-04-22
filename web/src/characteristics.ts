@@ -1,4 +1,3 @@
-/** Player-picked traits; max simultaneous selections in the builder. */
 export const MAX_PLAYER_CHARACTERISTICS = 2
 
 export type CharacteristicDef = {
@@ -21,7 +20,6 @@ function def(
   return { id, name, description }
 }
 
-/** Full rules text from Cyber Savage characteristics list. */
 export const CHARACTERISTICS: CharacteristicDef[] = [
   def(
     'Active Camo',

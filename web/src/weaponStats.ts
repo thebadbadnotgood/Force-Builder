@@ -1,6 +1,3 @@
-/**
- * Weapon category combat stats (Cyber Savage — tied to Light / Medium / Heavy).
- */
 export type WeaponTier = 'light' | 'medium' | 'heavy'
 
 export const WEAPON_CATEGORY_STATS: Record<
@@ -12,7 +9,6 @@ export const WEAPON_CATEGORY_STATS: Record<
   heavy: { attacks: 2, damage: 4 },
 }
 
-/** Unarmed — melee only; update if your table specifies different values. */
 export const UNARMED_MELEE_STATS = { attacks: 4, damage: 1 } as const
 
 export function getWeaponCategoryStats(tier: WeaponTier): {

@@ -45,14 +45,11 @@ import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
 const STORAGE_VERSION = 13
-/** Shown when no force name is set — keep in sync across top bar, sheet, and tab title. */
 const FORCE_NAME_EMPTY_LABEL = 'Name your force'
 const DOCUMENT_TITLE_BASE = 'Cyber Savage — Force Builder'
-/** Default force budget (each character costs points equal to their class tier / level). */
 const DEFAULT_FORCE_POINT_BUDGET = 12
 const FORCE_POINT_BUDGET_MIN = 1
 const FORCE_POINT_BUDGET_MAX = 12
-/** Roster / localStorage: allow legacy levels beyond sheet tiers. */
 const STORED_LEVEL_MIN = 1
 const STORED_LEVEL_MAX = 20
 
@@ -75,23 +72,12 @@ type Character = {
   name: string
   classId: string
   level: number
-  /** Exactly two player-chosen characteristics (ids). */
   characteristicIds: string[]
-  /** Weapon traits compatible with class equipment (see `weaponTraits.ts`). */
   weaponTraitIds: string[]
-  /**
-   * Chosen melee weapon type when the class has a melee weapon line; otherwise null.
-   */
   weaponTypeMelee: WeaponType | null
-  /**
-   * Chosen ranged weapon type when the class has a ranged weapon line; otherwise null.
-   */
   weaponTypeRanged: WeaponType | null
-  /** Spells — only for classes whose equipment includes “spell”. */
   spellIds: string[]
-  /** Current hit points (0 … class max HP). */
   currentHp: number
-  /** Tabletop round state — toggled on the roster card. */
   reacted: boolean
   activated: boolean
 }
@@ -461,14 +447,8 @@ function parseForcePointBudget(raw: unknown): number {
 type PersistedPayload = {
   characters: Character[]
   forcePointBudget: number
-  /** Name for this force (team / roster); editable from the roster top bar. */
   forceName: string
-  /**
-   * True once the user has opened the force hub (roster) for this slot — keeps
-   * an empty new force on the roster after refresh until they clear storage.
-   */
   forceHubActive: boolean
-  /** One combat discipline for the whole force; null if not chosen. */
   combatDisciplineId: string | null
 }
 
@@ -488,15 +468,10 @@ function savePersisted(payload: PersistedPayload) {
   )
 }
 
-/** Sum of class-tier points for the roster (each character’s `level` is their cost). */
 function totalForcePointsUsed(characters: Character[]): number {
   return characters.reduce((sum, c) => sum + c.level, 0)
 }
 
-/**
- * Projected points if the current draft is saved: roster minus the character being
- * edited, plus the draft’s tier cost when a class is selected.
- */
 function projectedForcePoints(
   characters: Character[],
   editingId: string | null,
