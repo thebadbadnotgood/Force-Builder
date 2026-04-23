@@ -1,3 +1,5 @@
+import { getClassById } from './classes'
+
 export type WeaponTraitDef = {
   id: string
   name: string
@@ -78,6 +80,63 @@ export function isWeaponTraitCompatibleWithEquipment(
   if (meleeOnly && !hasMelee) return false
   if (rangedOnly && !hasRanged) return false
   return true
+}
+
+export type WeaponTraitSlot = 'melee' | 'ranged'
+
+export function traitIsMeleeOnly(trait: WeaponTraitDef): boolean {
+  return (
+    trait.requireWeapon === 'melee' ||
+    descriptionImpliesMeleeOnly(trait.description)
+  )
+}
+
+export function traitIsRangedOnly(trait: WeaponTraitDef): boolean {
+  return (
+    trait.requireWeapon === 'ranged' ||
+    descriptionImpliesRangedOnly(trait.description)
+  )
+}
+
+/** Whether this trait can be assigned to the given weapon line (melee or ranged). */
+export function traitAllowsWeaponSlot(
+  trait: WeaponTraitDef,
+  slot: WeaponTraitSlot,
+): boolean {
+  if (traitIsMeleeOnly(trait)) return slot === 'melee'
+  if (traitIsRangedOnly(trait)) return slot === 'ranged'
+  return true
+}
+
+export function isWeaponTraitCompatibleWithSlot(
+  trait: WeaponTraitDef,
+  equipment: string,
+  slot: WeaponTraitSlot,
+): boolean {
+  if (!isWeaponTraitCompatibleWithEquipment(trait, equipment)) return false
+  const { hasMelee, hasRanged } = classEquipmentWeaponProfile(equipment)
+  if (slot === 'melee' && !hasMelee) return false
+  if (slot === 'ranged' && !hasRanged) return false
+  return traitAllowsWeaponSlot(trait, slot)
+}
+
+/** Dual-wield: one trait per weapon. Single weapon type: up to two traits on that weapon. */
+export const MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT = 1
+export const MAX_WEAPON_TRAITS_SINGLE_WEAPON = 2
+
+export function weaponTraitSlotCaps(equipment: string): {
+  melee: number
+  ranged: number
+} {
+  const { hasMelee, hasRanged } = classEquipmentWeaponProfile(equipment)
+  const dual = hasMelee && hasRanged
+  const cap = dual
+    ? MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT
+    : MAX_WEAPON_TRAITS_SINGLE_WEAPON
+  return {
+    melee: hasMelee ? cap : 0,
+    ranged: hasRanged ? cap : 0,
+  }
 }
 
 export const WEAPON_TRAITS: WeaponTraitDef[] = [
@@ -241,7 +300,128 @@ export const WEAPON_TRAITS: WeaponTraitDef[] = [
 ]
 
 const byId = new Map(WEAPON_TRAITS.map((t) => [t.id, t]))
+const validWeaponTraitId = new Set(WEAPON_TRAITS.map((t) => t.id))
 
 export function getWeaponTraitById(id: string): WeaponTraitDef | undefined {
   return byId.get(id)
+}
+
+export function normalizeWeaponTraitIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const ids = raw.filter((x): x is string => typeof x === 'string')
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const id of ids) {
+    if (!validWeaponTraitId.has(id) || seen.has(id)) continue
+    seen.add(id)
+    unique.push(id)
+  }
+  return unique
+}
+
+export function migrateLegacyWeaponTraitIdsToSlots(
+  classId: string,
+  legacyIds: string[],
+): { melee: string[]; ranged: string[] } {
+  const cls = getClassById(classId)
+  const eq = cls?.equipment ?? ''
+  const p = classEquipmentWeaponProfile(eq)
+  const dual = p.hasMelee && p.hasRanged
+  const ids = normalizeWeaponTraitIdList(legacyIds)
+  const melee: string[] = []
+  const ranged: string[] = []
+
+  for (const id of ids) {
+    const t = getWeaponTraitById(id)
+    if (!t || !isWeaponTraitCompatibleWithEquipment(t, eq)) continue
+    const canM =
+      p.hasMelee && isWeaponTraitCompatibleWithSlot(t, eq, 'melee')
+    const canR =
+      p.hasRanged && isWeaponTraitCompatibleWithSlot(t, eq, 'ranged')
+
+    if (dual) {
+      if (canM && !canR) {
+        if (melee.length < MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT)
+          melee.push(id)
+      } else if (canR && !canM) {
+        if (ranged.length < MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT)
+          ranged.push(id)
+      } else if (canM && canR) {
+        if (melee.length < MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT)
+          melee.push(id)
+        else if (ranged.length < MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT)
+          ranged.push(id)
+      }
+    } else {
+      if (p.hasMelee && canM && melee.length < MAX_WEAPON_TRAITS_SINGLE_WEAPON) {
+        melee.push(id)
+      } else if (
+        p.hasRanged &&
+        canR &&
+        ranged.length < MAX_WEAPON_TRAITS_SINGLE_WEAPON
+      ) {
+        ranged.push(id)
+      }
+    }
+  }
+  return { melee, ranged }
+}
+
+export function capAndValidateWeaponTraitSlots(
+  classId: string,
+  meleeRaw: unknown,
+  rangedRaw: unknown,
+): { melee: string[]; ranged: string[] } {
+  const eq = getClassById(classId)?.equipment ?? ''
+  const caps = weaponTraitSlotCaps(eq)
+
+  let melee = normalizeWeaponTraitIdList(meleeRaw)
+  let ranged = normalizeWeaponTraitIdList(rangedRaw)
+
+  melee = melee.filter((id) => {
+    const t = getWeaponTraitById(id)
+    return t && isWeaponTraitCompatibleWithSlot(t, eq, 'melee')
+  })
+  ranged = ranged.filter((id) => {
+    const t = getWeaponTraitById(id)
+    return t && isWeaponTraitCompatibleWithSlot(t, eq, 'ranged')
+  })
+
+  melee = melee.slice(0, caps.melee)
+  ranged = ranged.slice(0, caps.ranged)
+
+  const mset = new Set(melee)
+  ranged = ranged.filter((id) => !mset.has(id))
+
+  return { melee, ranged }
+}
+
+export function normalizeStoredWeaponTraitSlots(
+  classId: string,
+  o: Record<string, unknown>,
+): { melee: string[]; ranged: string[] } {
+  const hasNew =
+    Array.isArray(o.weaponTraitIdsMelee) ||
+    Array.isArray(o.weaponTraitIdsRanged)
+  if (hasNew) {
+    return capAndValidateWeaponTraitSlots(
+      classId,
+      o.weaponTraitIdsMelee,
+      o.weaponTraitIdsRanged,
+    )
+  }
+  const legacy = normalizeWeaponTraitIdList(o.weaponTraitIds)
+  const migrated = migrateLegacyWeaponTraitIdsToSlots(classId, legacy)
+  return capAndValidateWeaponTraitSlots(
+    classId,
+    migrated.melee,
+    migrated.ranged,
+  )
+}
+
+export function totalWeaponTraitCount(
+  melee: readonly string[],
+  ranged: readonly string[],
+): number {
+  return melee.length + ranged.length
 }

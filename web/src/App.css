@@ -1162,6 +1162,65 @@ button.char-card__stats--hit:focus-visible {
   margin: 0 0 1rem;
 }
 
+.weapon-focus-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.weapon-focus-tabs__btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cs-muted);
+  background: var(--cs-input-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: 2px;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.weapon-focus-tabs__btn:hover {
+  border-color: rgba(0, 255, 136, 0.35);
+  color: var(--cs-text);
+}
+
+.weapon-focus-tabs__btn--selected {
+  border-color: var(--cs-green);
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--cs-green);
+}
+
+.weapon-focus-tabs__title {
+  font-size: 0.8125rem;
+  letter-spacing: 0.12em;
+}
+
+.weapon-focus-tabs__meta {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--cs-muted);
+}
+
+.weapon-focus-tabs__btn--selected .weapon-focus-tabs__meta {
+  color: var(--cs-green-dim);
+}
+
 .weapon-type-picker__buttons {
   display: flex;
   flex-wrap: wrap;

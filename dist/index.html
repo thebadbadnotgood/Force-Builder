@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Force Builder</title>
+    <meta name="theme-color" content="#061a0f" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg">
+      <div class="scanlines" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true"></div>
+        <div class="brand__text">
+          <div class="brand__title">CYBER SAVAGE</div>
+          <div class="brand__subtitle">Force Builder</div>
+        </div>
+      </div>
+      <a class="topbar__link" href="./cyber-savage-test.pdf" target="_blank" rel="noreferrer">
+        View rules template (PDF)
+      </a>
+    </header>
+
+    <main class="wrap">
+      <div id="root"></div>
+      <footer class="footer">
+        <div class="footer__hint">
+          Tip: your progress autosaves locally in this browser.
+        </div>
+      </footer>
+    </main>
+
+    <!-- Zero-install React (no Node/npm required). -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
+    <script type="text/babel" data-presets="react" src="./app.jsx"></script>
+  </body>
+</html>
