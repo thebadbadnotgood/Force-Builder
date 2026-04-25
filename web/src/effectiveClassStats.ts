@@ -1,6 +1,5 @@
 import type { ForceClass } from './classes'
 
-/** Dice steps used for "strengthen defense" (Heavy armor). */
 const DEFENSE_DICE_STEPS = ['d4', 'd6', 'd8', 'd10', 'd12'] as const
 
 function strengthenDefenseDie(current: string): string {

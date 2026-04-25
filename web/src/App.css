@@ -76,8 +76,6 @@
   min-width: 0;
 }
 
-/* Solid black in the file blends into the topbar via screen so it doesn’t
-   read as a flat box. Avoid drop-shadow — it traces the whole PNG bounds. */
 .topbar__logo {
   display: block;
   height: 2.75rem;
@@ -130,7 +128,6 @@
   padding: 0.25rem 0.6rem;
 }
 
-/* Right-side top bar: same layout and type on roster and character editor. */
 .topbar__cluster {
   display: flex;
   flex-wrap: wrap;
@@ -2248,6 +2245,117 @@ button.char-card__stats--hit:focus-visible {
   background: rgba(255, 107, 107, 0.08);
 }
 
+.topbar__pick-hint {
+  font-size: 0.8125rem;
+  color: var(--cs-muted);
+  letter-spacing: 0.04em;
+}
+
+.main--force-picker {
+  max-width: 40rem;
+  margin-inline: auto;
+  width: 100%;
+  justify-content: safe center;
+  padding-top: clamp(2rem, 12svh, 5rem);
+}
+
+.force-picker {
+  position: relative;
+  z-index: 1;
+  padding: 0 1.5rem 2rem;
+  width: 100%;
+}
+
+.force-picker__head {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.force-picker__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--cs-text);
+  letter-spacing: 0.04em;
+}
+
+.force-picker__lead {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--cs-muted);
+}
+
+.force-picker__new {
+  width: min(16rem, 100%);
+  margin-inline: auto;
+}
+
+.force-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.force-picker__row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.force-picker__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  color: var(--cs-text);
+  background: rgba(4, 12, 8, 0.65);
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
+}
+
+.force-picker__open:hover {
+  border-color: rgba(0, 255, 136, 0.35);
+  background: rgba(6, 26, 15, 0.55);
+}
+
+.force-picker__open--active {
+  border-color: rgba(0, 255, 136, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.15);
+}
+
+.force-picker__name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.force-picker__meta {
+  font-size: 0.8125rem;
+  color: var(--cs-muted);
+}
+
+.force-picker__delete {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 @media (max-width: 640px) {
   .topbar {
     flex-wrap: wrap;
@@ -2257,5 +2365,13 @@ button.char-card__stats--hit:focus-visible {
     order: 3;
     flex: 1 1 100%;
     max-width: none;
+  }
+
+  .force-picker__row {
+    flex-wrap: wrap;
+  }
+
+  .force-picker__delete {
+    width: 100%;
   }
 }

@@ -54,7 +54,9 @@ import {
 import './App.css'
 
 const STORAGE_KEY = 'cyber-savage-force-builder'
+const LIBRARY_KEY = 'cyber-savage-force-library'
 const STORAGE_VERSION = 14
+const LIBRARY_VERSION = 1 as const
 const FORCE_NAME_EMPTY_LABEL = 'Name your force'
 const DOCUMENT_TITLE_BASE = 'Cyber Savage — Force Builder'
 const DEFAULT_FORCE_POINT_BUDGET = 12
@@ -310,17 +312,20 @@ function parsePersistedCombatDisciplineId(parsed: unknown): string | null {
   return null
 }
 
-function loadPersisted(): PersistedPayload {
-  const empty = (): PersistedPayload => ({
+function emptyPersistedPayload(): PersistedPayload {
+  return {
     characters: [],
     forcePointBudget: DEFAULT_FORCE_POINT_BUDGET,
     forceName: '',
     forceHubActive: false,
     combatDisciplineId: null,
-  })
+  }
+}
+
+function loadPersisted(): PersistedPayload {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return empty()
+    if (!raw) return emptyPersistedPayload()
 
     const parsed = JSON.parse(raw) as unknown
 
@@ -418,9 +423,9 @@ function loadPersisted(): PersistedPayload {
       }
     }
 
-    return empty()
+    return emptyPersistedPayload()
   } catch {
-    return empty()
+    return emptyPersistedPayload()
   }
 }
 
@@ -454,21 +459,123 @@ type PersistedPayload = {
   combatDisciplineId: string | null
 }
 
-type AppView = 'roster' | 'wizard'
-
-function savePersisted(payload: PersistedPayload) {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      version: STORAGE_VERSION,
-      characters: payload.characters,
-      forcePointBudget: payload.forcePointBudget,
-      forceName: normalizeForceName(payload.forceName),
-      forceHubActive: payload.forceHubActive,
-      combatDisciplineId: payload.combatDisciplineId,
-    }),
-  )
+type ForceSlot = {
+  id: string
+  updatedAt: number
+  payload: PersistedPayload
 }
+
+type ForceLibraryFile = {
+  version: typeof LIBRARY_VERSION
+  activeForceId: string | null
+  forces: ForceSlot[]
+}
+
+function normalizeSlotPayload(raw: unknown): PersistedPayload {
+  if (!raw || typeof raw !== 'object') return emptyPersistedPayload()
+  const o = raw as Record<string, unknown>
+  const characters = Array.isArray(o.characters)
+    ? o.characters
+        .map(normalizeCharacter)
+        .filter((c): c is Character => c !== null)
+    : []
+  return {
+    characters,
+    forcePointBudget: parseForcePointBudget(o.forcePointBudget),
+    forceName:
+      typeof o.forceName === 'string' ? normalizeForceName(o.forceName) : '',
+    forceHubActive: parseForceHubActive(raw),
+    combatDisciplineId: parsePersistedCombatDisciplineId(raw),
+  }
+}
+
+function normalizeForceSlot(raw: unknown): ForceSlot | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  if (typeof o.id !== 'string' || typeof o.updatedAt !== 'number') return null
+  return {
+    id: o.id,
+    updatedAt: o.updatedAt,
+    payload: normalizeSlotPayload(o.payload),
+  }
+}
+
+function loadForceLibrary(): ForceLibraryFile {
+  try {
+    const raw = localStorage.getItem(LIBRARY_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (parsed && typeof parsed === 'object') {
+        const p = parsed as Record<string, unknown>
+        if (p.version === LIBRARY_VERSION && Array.isArray(p.forces)) {
+          const forces = p.forces
+            .map(normalizeForceSlot)
+            .filter((s): s is ForceSlot => s !== null)
+          let activeForceId =
+            typeof p.activeForceId === 'string' ? p.activeForceId : null
+          if (activeForceId && !forces.some((f) => f.id === activeForceId)) {
+            activeForceId = null
+          }
+          if (!activeForceId && forces.length === 1) {
+            activeForceId = forces[0].id
+          }
+          return { version: LIBRARY_VERSION, activeForceId, forces }
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const legacy = loadPersisted()
+  const hasLegacy =
+    legacy.characters.length > 0 ||
+    legacy.forceHubActive ||
+    !!normalizeForceName(legacy.forceName)
+  if (hasLegacy) {
+    const id = newId()
+    const lib: ForceLibraryFile = {
+      version: LIBRARY_VERSION,
+      activeForceId: id,
+      forces: [{ id, updatedAt: Date.now(), payload: legacy }],
+    }
+    try {
+      localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib))
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+    return lib
+  }
+
+  return { version: LIBRARY_VERSION, activeForceId: null, forces: [] }
+}
+
+function flushPayloadIntoLibrary(
+  lib: ForceLibraryFile,
+  activeId: string | null,
+  payload: PersistedPayload,
+): ForceLibraryFile {
+  if (!activeId) return lib
+  return {
+    ...lib,
+    forces: lib.forces.map((f) =>
+      f.id === activeId
+        ? { ...f, updatedAt: Date.now(), payload: { ...payload } }
+        : f,
+    ),
+  }
+}
+
+function writeForceLibraryToStorage(lib: ForceLibraryFile) {
+  try {
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib))
+  } catch {
+    /* ignore */
+  }
+}
+
+type AppView = 'forcePicker' | 'roster' | 'wizard'
 
 function totalForcePointsUsed(characters: Character[]): number {
   return characters.reduce((sum, c) => sum + c.level, 0)
@@ -677,7 +784,6 @@ function WeaponTraitSlotPicker({
   cap,
   onToggle,
 }: {
-  /** Omit or pass empty string to hide the label row (e.g. when a tab title already names the weapon). */
   label?: string
   slot: WeaponTraitSlot
   traits: WeaponTraitDef[]
@@ -724,22 +830,38 @@ function WeaponTraitSlotPicker({
   )
 }
 
+function createAppBootstrap(): {
+  library: ForceLibraryFile
+  view: AppView
+  payload: PersistedPayload
+} {
+  const library = loadForceLibrary()
+  const activeId = library.activeForceId
+  const slot = activeId
+    ? library.forces.find((f) => f.id === activeId)
+    : undefined
+  const payload = slot?.payload ?? emptyPersistedPayload()
+  const view: AppView = slot ? 'roster' : 'forcePicker'
+  return { library, view, payload }
+}
+
 function App() {
-  const [bootstrap] = useState(() => ({ p: loadPersisted() }))
-  const [view, setView] = useState<AppView>('roster')
-  const [characters, setCharacters] = useState(bootstrap.p.characters)
+  const [bootstrap] = useState(createAppBootstrap)
+  const [library, setLibrary] = useState<ForceLibraryFile>(bootstrap.library)
+  const [view, setView] = useState<AppView>(bootstrap.view)
+  const [characters, setCharacters] = useState(bootstrap.payload.characters)
   const [forcePointBudget, setForcePointBudget] = useState(
-    bootstrap.p.forcePointBudget,
+    bootstrap.payload.forcePointBudget,
   )
-  const [forceName, setForceName] = useState(bootstrap.p.forceName)
+  const [forceName, setForceName] = useState(bootstrap.payload.forceName)
   const [forceHubActive, setForceHubActive] = useState(
     () =>
-      bootstrap.p.forceHubActive ||
-      bootstrap.p.characters.length > 0 ||
-      !!normalizeForceName(bootstrap.p.forceName),
+      bootstrap.payload.forceHubActive ||
+      bootstrap.payload.characters.length > 0 ||
+      !!normalizeForceName(bootstrap.payload.forceName),
   )
   const [combatDisciplineId, setCombatDisciplineId] = useState<string | null>(
-    () => bootstrap.p.combatDisciplineId ?? null,
+    () => bootstrap.payload.combatDisciplineId ?? null,
   )
   const [combatDisciplineRulesOpen, setCombatDisciplineRulesOpen] =
     useState(false)
@@ -760,7 +882,6 @@ function App() {
   const [step, setStep] = useState<Step>('sheet')
   const [traitFilter, setTraitFilter] = useState('')
   const [weaponTraitFilter, setWeaponTraitFilter] = useState('')
-  /** Dual-wield: which weapon line is being edited (single-weapon classes ignore this). */
   const [weaponWizardFocus, setWeaponWizardFocus] = useState<
     'melee' | 'ranged'
   >('melee')
@@ -772,15 +893,133 @@ function App() {
   const classPickerOpenPanelRef = useRef<HTMLDivElement | null>(null)
   const [classPickerReservePx, setClassPickerReservePx] = useState(0)
 
-  useEffect(() => {
-    savePersisted({
+  const currentPayload: PersistedPayload = useMemo(
+    () => ({
       characters,
       forcePointBudget,
       forceName,
       forceHubActive,
       combatDisciplineId,
+    }),
+    [
+      characters,
+      forcePointBudget,
+      forceName,
+      forceHubActive,
+      combatDisciplineId,
+    ],
+  )
+
+  useEffect(() => {
+    const snapshot =
+      library.activeForceId != null
+        ? flushPayloadIntoLibrary(
+            library,
+            library.activeForceId,
+            currentPayload,
+          )
+        : library
+    writeForceLibraryToStorage(snapshot)
+  }, [library, currentPayload])
+
+  const hydrateFromPayload = useCallback((p: PersistedPayload) => {
+    setCharacters(p.characters)
+    setForcePointBudget(p.forcePointBudget)
+    setForceName(p.forceName)
+    setForceHubActive(
+      p.forceHubActive ||
+        p.characters.length > 0 ||
+        !!normalizeForceName(p.forceName),
+    )
+    setCombatDisciplineId(p.combatDisciplineId)
+  }, [])
+
+  const openForcePicker = useCallback(() => {
+    setLibrary((prev) =>
+      prev.activeForceId
+        ? flushPayloadIntoLibrary(prev, prev.activeForceId, currentPayload)
+        : prev,
+    )
+    setView('forcePicker')
+  }, [currentPayload])
+
+  const selectForce = useCallback(
+    (id: string) => {
+      const flushed = library.activeForceId
+        ? flushPayloadIntoLibrary(library, library.activeForceId, currentPayload)
+        : library
+      const slot = flushed.forces.find((f) => f.id === id)
+      if (!slot) return
+      setLibrary({ ...flushed, activeForceId: id })
+      hydrateFromPayload(slot.payload)
+      setView('roster')
+      setEditingId(null)
+      setDraft(emptyDraft())
+      setStep('sheet')
+      setTraitFilter('')
+      setWeaponTraitFilter('')
+      setSpellFilter('')
+      setClassChartOpenLevel(null)
+    },
+    [library, currentPayload, hydrateFromPayload],
+  )
+
+  const createNewForce = useCallback(() => {
+    const id = newId()
+    const empty = emptyPersistedPayload()
+    setLibrary((prev) => {
+      const flushed = prev.activeForceId
+        ? flushPayloadIntoLibrary(prev, prev.activeForceId, currentPayload)
+        : prev
+      return {
+        ...flushed,
+        activeForceId: id,
+        forces: [
+          ...flushed.forces,
+          { id, updatedAt: Date.now(), payload: { ...empty } },
+        ],
+      }
     })
-  }, [characters, forcePointBudget, forceName, forceHubActive, combatDisciplineId])
+    hydrateFromPayload(empty)
+    setView('roster')
+    setEditingId(null)
+    setDraft(emptyDraft())
+    setStep('sheet')
+    setTraitFilter('')
+    setWeaponTraitFilter('')
+    setSpellFilter('')
+    setClassChartOpenLevel(null)
+  }, [currentPayload, hydrateFromPayload])
+
+  const deleteForce = useCallback(
+    (id: string) => {
+      const flushed = library.activeForceId
+        ? flushPayloadIntoLibrary(library, library.activeForceId, currentPayload)
+        : library
+      if (!flushed.forces.some((f) => f.id === id)) return
+      const nextForces = flushed.forces.filter((f) => f.id !== id)
+      let nextActive = flushed.activeForceId
+      if (nextActive === id) nextActive = nextForces[0]?.id ?? null
+      setLibrary({ ...flushed, forces: nextForces, activeForceId: nextActive })
+      if (flushed.activeForceId === id) {
+        if (nextActive) {
+          const slot = nextForces.find((f) => f.id === nextActive)
+          if (slot) hydrateFromPayload(slot.payload)
+        } else {
+          hydrateFromPayload(emptyPersistedPayload())
+        }
+        setView(nextActive ? 'roster' : 'forcePicker')
+        setEditingId(null)
+        setDraft(emptyDraft())
+        setStep('sheet')
+        setTraitFilter('')
+        setWeaponTraitFilter('')
+        setSpellFilter('')
+        setClassChartOpenLevel(null)
+      }
+    },
+    [library, currentPayload, hydrateFromPayload],
+  )
 
   useEffect(() => {
     if (!editingForceName) return
@@ -887,7 +1126,6 @@ function App() {
       if (!ro) {
         ro = new ResizeObserver(update)
         ro.observe(panel)
-        /* No scroll listener: viewport overlap fluctuates while padding moves the footer. */
         window.addEventListener('resize', update)
       }
     }
@@ -1508,6 +1746,22 @@ function App() {
 
       <header className="topbar">
         <div className="topbar__left">
+          {view === 'forcePicker' ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--small topbar__back"
+              onClick={() => {
+                if (library.activeForceId) {
+                  setView('roster')
+                }
+              }}
+              aria-label="Back to force"
+              title="Back to builder"
+              disabled={!library.activeForceId}
+            >
+              ←
+            </button>
+          ) : null}
           {view === 'wizard' && step !== 'sheet' && !editingId ? (
             <button
               type="button"
@@ -1542,6 +1796,13 @@ function App() {
               {topbarForceNameControls}
               <button
                 type="button"
+                className="btn btn--ghost btn--small topbar__roster-btn"
+                onClick={openForcePicker}
+              >
+                Forces
+              </button>
+              <button
+                type="button"
                 className="btn btn--ghost topbar__roster-btn"
                 onClick={goToRoster}
               >
@@ -1552,6 +1813,13 @@ function App() {
         ) : view === 'roster' ? (
           <div className="topbar__cluster" aria-live="polite">
             {topbarForceNameControls}
+            <button
+              type="button"
+              className="btn btn--ghost btn--small topbar__roster-btn"
+              onClick={openForcePicker}
+            >
+              Forces
+            </button>
             <span className="topbar__roster-sep" aria-hidden="true">
               ·
             </span>
@@ -1560,12 +1828,20 @@ function App() {
               {characters.length === 1 ? 'character' : 'characters'}
             </span>
           </div>
+        ) : view === 'forcePicker' ? (
+          <div className="topbar__cluster" aria-live="polite">
+            <span className="topbar__pick-hint">Saved forces</span>
+          </div>
         ) : null}
       </header>
 
       <main
         className={
-          view === 'wizard' && step === 'name' ? 'main main--intro' : 'main'
+          view === 'wizard' && step === 'name'
+            ? 'main main--intro'
+            : view === 'forcePicker'
+              ? 'main main--force-picker'
+              : 'main'
         }
         style={
           classPickerReservePx > 0
@@ -1573,6 +1849,62 @@ function App() {
             : undefined
         }
       >
+        {view === 'forcePicker' && (
+          <div className="force-picker">
+            <header className="force-picker__head">
+              <button
+                type="button"
+                className="btn btn--primary force-picker__new"
+                onClick={createNewForce}
+              >
+                New force
+              </button>
+            </header>
+            {library.forces.length > 0 && (
+              <ul className="force-picker__list">
+                {[...library.forces]
+                  .sort((a, b) => b.updatedAt - a.updatedAt)
+                  .map((f) => {
+                    const payload =
+                      f.id === library.activeForceId
+                        ? currentPayload
+                        : f.payload
+                    const label =
+                      normalizeForceName(payload.forceName) || 'Untitled force'
+                    const isActive = f.id === library.activeForceId
+                    const pts = totalForcePointsUsed(payload.characters)
+                    return (
+                      <li key={f.id} className="force-picker__row">
+                        <button
+                          type="button"
+                          className={`force-picker__open${isActive ? ' force-picker__open--active' : ''}`}
+                          onClick={() => selectForce(f.id)}
+                        >
+                          <span className="force-picker__name">{label}</span>
+                          <span className="force-picker__meta">
+                            {payload.characters.length}{' '}
+                            {payload.characters.length === 1
+                              ? 'character'
+                              : 'characters'}
+                            <span aria-hidden="true"> · </span>
+                            {pts} pts
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--small force-picker__delete"
+                          onClick={() => deleteForce(f.id)}
+                          aria-label={`Delete ${label}`}
+                        >
+                          Delete
+                        </button>
+                      </li>
+                    )
+                  })}
+              </ul>
+            )}
+          </div>
+        )}
         {view === 'roster' && (
           <div className="roster">
             <div className="roster__top-split">

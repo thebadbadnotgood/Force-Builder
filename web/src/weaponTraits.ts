@@ -98,7 +98,6 @@ export function traitIsRangedOnly(trait: WeaponTraitDef): boolean {
   )
 }
 
-/** Whether this trait can be assigned to the given weapon line (melee or ranged). */
 export function traitAllowsWeaponSlot(
   trait: WeaponTraitDef,
   slot: WeaponTraitSlot,
@@ -120,7 +119,6 @@ export function isWeaponTraitCompatibleWithSlot(
   return traitAllowsWeaponSlot(trait, slot)
 }
 
-/** Dual-wield: one trait per weapon. Single weapon type: up to two traits on that weapon. */
 export const MAX_WEAPON_TRAITS_DUAL_WIELD_PER_SLOT = 1
 export const MAX_WEAPON_TRAITS_SINGLE_WEAPON = 2
 
